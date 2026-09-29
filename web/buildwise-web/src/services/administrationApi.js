@@ -1,10 +1,9 @@
 import { authApi } from './authApi'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5078/api'
+import { API_BASE, fetchOrThrow } from './apiTransport'
 
 async function request(path, { method = 'GET', body } = {}) {
   const session = authApi.loadSession()
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetchOrThrow(`${API_BASE}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json', ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,

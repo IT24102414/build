@@ -16,6 +16,23 @@ public class NotificationService
         _logger = logger;
     }
 
+    public async Task CreateProcurementEventAsync(int userId, int materialRequestId, int purchaseOrderId, int? supplierId)
+    {
+        try
+        {
+            _context.NotificationEvents.Add(new NotificationEvent
+            {
+                UserId = userId,
+                Type = "ProcurementApproved",
+                Title = "Procurement approved",
+                Body = $"Your material request #{materialRequestId} was approved. Purchase Order #{purchaseOrderId} is now available for delivery tracking.",
+                MaterialRequestId = materialRequestId
+            });
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "Could not persist procurement notification event for user {UserId}.", userId); }
+    }
+
     public async Task CreateInspectionEventAsync(int userId, int inspectionId, int deliveryId, int ncrId, string decision)
     {
         try

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using BuildWise.Api.Models.Entities;
+using BuildWise.Api.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -83,6 +84,7 @@ builder.Services.AddScoped<DeliveryAgentService>();
 // Component 4 service: quality inspection, NCR management, and notification events.
 builder.Services.AddScoped<QualityInspectionService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<DashboardService>();
 
 // Shared authentication (Core, used by every component controllers, React and Flutter)
 builder.Services.AddSingleton<JwtTokenService>();
@@ -120,16 +122,62 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("SiteOperationsOnly", policy =>
-        policy.RequireRole("SiteEngineer", "SiteOfficer"));
-    options.AddPolicy("ProcurementStaffOnly", policy =>
-        policy.RequireRole("ProcurementOfficer", "ProcurementManager", "Administrator"));
-    options.AddPolicy("QualityControlOnly", policy =>
-        policy.RequireRole("QualityInspector"));
-    options.AddPolicy("MaterialRequestApprovalOnly", policy =>
-        policy.RequireRole("ProcurementManager", "SiteManager", "Administrator"));
-    options.AddPolicy("ProcurementDecisionOnly", policy =>
-        policy.RequireRole("ProcurementManager", "SiteManager", "Administrator"));
+    // Every policy below is registered from the Roles/Policies constants so that
+    // the [Authorize] attributes on controllers and these grants can never drift
+    // apart (Phase 1 RBAC hardening).
+
+    options.AddPolicy(Policies.SiteOperationsOnly, policy =>
+        policy.RequireRole(Roles.SiteEngineer, Roles.SiteOfficer));
+
+    options.AddPolicy(Policies.ProcurementStaffOnly, policy =>
+        policy.RequireRole(Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.Administrator));
+
+    options.AddPolicy(Policies.SupplierAdministrationOnly, policy =>
+        policy.RequireRole(Roles.ProcurementOfficer, Roles.Administrator));
+
+    options.AddPolicy(Policies.QualityControlOnly, policy =>
+        policy.RequireRole(Roles.QualityInspector, Roles.Administrator));
+
+    options.AddPolicy(Policies.MaterialRequestApprovalOnly, policy =>
+        policy.RequireRole(Roles.ProcurementManager, Roles.SiteManager, Roles.Administrator));
+
+    options.AddPolicy(Policies.ProcurementDecisionOnly, policy =>
+        policy.RequireRole(Roles.ProcurementManager, Roles.SiteManager, Roles.Administrator));
+
+    options.AddPolicy(Policies.MaterialRequestReaders, policy =>
+        policy.RequireRole(
+            Roles.SiteEngineer, Roles.SiteOfficer,
+            Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.SiteManager,
+            Roles.Administrator));
+
+    options.AddPolicy(Policies.QualityReaders, policy =>
+        policy.RequireRole(
+            Roles.SiteEngineer, Roles.SiteOfficer,
+            Roles.ProcurementManager, Roles.SiteManager,
+            Roles.QualityInspector, Roles.Administrator));
+
+    options.AddPolicy(Policies.ProcurementStaffAndAdmin, policy =>
+        policy.RequireRole(Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.SiteManager, Roles.Administrator));
+
+    // Internal staff surface. Supplier portal users are authenticated but must
+    // never reach procurement, supplier master data, or other suppliers' data.
+    options.AddPolicy(Policies.InternalStaffOnly, policy =>
+        policy.RequireRole(
+            Roles.SiteEngineer, Roles.SiteOfficer,
+            Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.SiteManager,
+            Roles.ReceivingOfficer, Roles.QualityInspector,
+            Roles.ProjectManager, Roles.Administrator));
+
+    options.AddPolicy(Policies.DeliveryParticipantsOnly, policy =>
+        policy.RequireRole(
+            Roles.SiteEngineer, Roles.SiteOfficer,
+            Roles.ReceivingOfficer, Roles.QualityInspector,
+            Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.SiteManager,
+            Roles.Administrator));
+
+    // Supplier portal: a dedicated external role, never mixed with internal staff.
+    options.AddPolicy(Policies.SupplierPortalOnly, policy =>
+        policy.RequireRole(Roles.Supplier));
 });
 
 // CORS: permissive dev policy (covers React on localhost:5173 and Flutter/Chrome).
@@ -217,3 +265,9 @@ app.MapGet("/health", () => Results.Ok(new
 app.MapControllers();
 
 app.Run();
+
+// Exposed so BuildWise.Api.Tests can boot the real pipeline through
+// WebApplicationFactory<Program>. The RBAC suite asserts 401/403 behaviour
+// against this exact middleware order and policy set, so it must not be tested
+// against a replica of Program.cs.
+public partial class Program;

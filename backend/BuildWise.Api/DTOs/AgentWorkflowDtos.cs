@@ -23,7 +23,10 @@ public record ProcurementPlanningInputFacts(
     string Priority,
     string RequestStatus,
     List<ProcurementPlanningItemFact> Items,
-    int AvailableQuotationCount
+    int AvailableQuotationCount,
+    // Project materials budget, so the plan can require a budget check.
+    // Null = no allocation set for the project.
+    decimal? MaterialBudgetAmount = null
 );
 
 public record ProcurementPlanningStep(

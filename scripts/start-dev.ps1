@@ -20,6 +20,8 @@
 
 .PARAMETER NoBuild
     Skip `dotnet build` (use when the API is already built and no C# source changed).
+    If C# source is newer than the built assembly the script stops with an error
+    rather than serving stale code.
 
 .PARAMETER TimeoutSeconds
     How long to wait for the services to answer before reporting status. Default: 60.
@@ -89,16 +91,63 @@ function Test-PortBusy {
     finally { $client.Dispose() }
 }
 
+<#
+    Reports whether the compiled API assembly still matches the C# sources.
+
+    A running API and a -NoBuild start both serve the DLL on disk, so a source
+    file newer than the DLL means the stack is about to run code that is not in
+    the repository yet. That is exactly how a fixed controller keeps behaving
+    like the old one, and it looks like an application bug rather than a stale
+    build. Note that a running API also holds BuildWise.Api.exe open, so
+    `dotnet build` fails until the API is stopped - which is why this needs to
+    be reported rather than silently tolerated.
+
+    Returns 'Current', 'Stale', or 'Missing'.
+#>
+function Get-ApiBuildState {
+    param([string]$SourceDir, [string]$DllPath)
+
+    if (-not (Test-Path $DllPath)) { return 'Missing' }
+
+    $newestSource = Get-ChildItem -Path $SourceDir -Recurse -File -Include '*.cs', '*.csproj' |
+        Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+
+    if ($newestSource -and $newestSource.LastWriteTime -gt (Get-Item $DllPath).LastWriteTime) {
+        return 'Stale'
+    }
+    return 'Current'
+}
+
 $pids = @{}
 
 # ------------------------------------------------------------------ 1. BuildWise API
 if (Test-PortBusy -Port 5078) {
     Write-Host 'Port 5078 already in use - leaving the running API alone.' -ForegroundColor Yellow
+    # That API owns the assembly on disk, so a change merged into the repository
+    # after it started is not being served. Say so loudly: otherwise a fixed
+    # controller keeps returning old results and looks like a code bug.
+    switch (Get-ApiBuildState -SourceDir $apiDir -DllPath $apiDll) {
+        'Stale' {
+            Write-Host 'WARNING: the C# source is newer than the build the API on :5078 is serving.' -ForegroundColor Red
+            Write-Host '         It is running stale code - restart it: .\scripts\stop-dev.ps1, then .\scripts\start-dev.ps1' -ForegroundColor Red
+        }
+        'Missing' {
+            Write-Host 'WARNING: no compiled assembly found for the API on :5078.' -ForegroundColor Red
+        }
+    }
 } else {
     if (-not $NoBuild) {
         Write-Host 'Building BuildWise.Api...' -ForegroundColor Cyan
         & dotnet build $apiProject --nologo -v minimal | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed - fix the build errors before starting the stack.' }
+    }
+    elseif ((Get-ApiBuildState -SourceDir $apiDir -DllPath $apiDll) -eq 'Stale') {
+        # -NoBuild means "the API is already built and no C# source changed". If
+        # that is not true, starting anyway serves stale code, so refuse and name
+        # the fix instead of reproducing the problem silently.
+        throw 'C# source changed since the last build - re-run without -NoBuild so the API picks up the change.'
     }
     if (-not (Test-Path $apiDll)) { throw "API assembly not found at $apiDll - run without -NoBuild." }
 

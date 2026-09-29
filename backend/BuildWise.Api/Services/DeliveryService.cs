@@ -31,8 +31,17 @@ public class DeliveryService
     public async Task<List<PurchaseOrder>> GetConfirmedPurchaseOrdersAsync()
     {
         return await _context.PurchaseOrders
+            // C3 links the supplier directly, C2 via the winning quotation.
+            // Both must be loaded for the receiving projection to name the supplier.
+            .Include(p => p.Supplier)
+            .Include(p => p.Quotation)
+                .ThenInclude(q => q!.Supplier)
             .Include(p => p.Items)
                 .ThenInclude(i => i.Material)
+            .Include(p => p.Items)
+                .ThenInclude(i => i.QuotationItem)
+                    .ThenInclude(qi => qi.MaterialRequestItem)
+                        .ThenInclude(mri => mri.Material)
             .Where(p => p.Status == PurchaseOrderStatus.Confirmed)
             .ToListAsync();
     }
@@ -65,6 +74,15 @@ public class DeliveryService
             if (poItem == null)
                 throw new InvalidOperationException($"Material ID {item.MaterialId} is not part of this Purchase Order.");
 
+            // A supplier cannot deliver more than was ordered. Without this the
+            // API accepted e.g. 500 received against a 250-unit order and stored
+            // it as an ordinary DiscrepancyReported delivery, which is neither a
+            // shortage nor a plausible over-delivery. Combined with the checks
+            // above, the valid relationship is 0 <= Damaged <= Received <= Ordered.
+            if (item.ReceivedQuantity > poItem.OrderedQuantity)
+                throw new InvalidOperationException(
+                    $"Received quantity cannot exceed the ordered quantity. Ordered {poItem.OrderedQuantity:0.##}, received {item.ReceivedQuantity:0.##}.");
+
             var agentRun = _agentClient == null
                 ? new AgentClientResult<DeliveryAgentResult>(
                     DeliveryAgentResult.Deterministic(poItem.OrderedQuantity, item.ReceivedQuantity, item.DamagedQuantity),
@@ -84,6 +102,38 @@ public class DeliveryService
         delivery.DeliveredAt = DateTime.UtcNow;
 
         _context.Deliveries.Add(delivery);
+        await _context.SaveChangesAsync();
+
+        foreach (var item in delivery.Items)
+        {
+            var poItem = po.Items.First(i => i.MaterialId == item.MaterialId);
+            var shortage = Math.Max(0m, poItem.OrderedQuantity - item.ReceivedQuantity);
+            var sentForInspection = Math.Max(0m, item.ReceivedQuantity - item.DamagedQuantity);
+            if (shortage > 0)
+            {
+                _context.DeliveryIssues.Add(new DeliveryIssue
+                {
+                    DeliveryId = delivery.Id,
+                    DeliveryItemId = item.Id,
+                    IssueType = DeliveryIssueType.Shortage,
+                    Severity = DeliveryIssueSeverity.High,
+                    Description = $"Shortage of {shortage} unit(s): ordered {poItem.OrderedQuantity}, received {item.ReceivedQuantity}. Sent for inspection: {sentForInspection}.",
+                    ReportedByUserId = delivery.ReceivedByUserId
+                });
+            }
+            if (item.DamagedQuantity > 0)
+            {
+                _context.DeliveryIssues.Add(new DeliveryIssue
+                {
+                    DeliveryId = delivery.Id,
+                    DeliveryItemId = item.Id,
+                    IssueType = DeliveryIssueType.Damage,
+                    Severity = DeliveryIssueSeverity.Medium,
+                    Description = $"Damage of {item.DamagedQuantity} unit(s) recorded. Sent for inspection: {sentForInspection}.",
+                    ReportedByUserId = delivery.ReceivedByUserId
+                });
+            }
+        }
         await _context.SaveChangesAsync();
 
         if (_auditService is not null)
@@ -129,6 +179,11 @@ public class DeliveryService
             .Include(d => d.PurchaseOrder)
                 .ThenInclude(p => p!.Quotation)
                     .ThenInclude(q => q!.Supplier)
+            // Purchase-order lines are needed to resolve each delivery item's
+            // ordered quantity. Without this the receiving projection reported
+            // 0 ordered, so a shortage could never be computed.
+            .Include(d => d.PurchaseOrder)
+                .ThenInclude(p => p!.Items)
             .Include(d => d.Items)
                 .ThenInclude(i => i.Material)
             .OrderByDescending(d => d.DeliveredAt)

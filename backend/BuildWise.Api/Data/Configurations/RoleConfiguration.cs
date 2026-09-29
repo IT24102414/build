@@ -29,7 +29,11 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
             // Aliases required by the role-based access matrix and frontend shells:
             // SiteOfficer ↔ SiteEngineer, SiteManager ↔ ProcurementManager.
             new Role { Id = 8, Name = "SiteOfficer" },
-            new Role { Id = 9, Name = "SiteManager" }
+            new Role { Id = 9, Name = "SiteManager" },
+            // External supplier portal user. Bound to exactly one supplier row via
+            // users.supplier_id, which the API reads from a signed JWT claim so a
+            // supplier can never read another supplier's RFQs or quotations.
+            new Role { Id = 10, Name = "Supplier" }
         );
     }
 }

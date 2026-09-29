@@ -38,10 +38,19 @@ try {
     $inspector = Login 'quality.inspector@buildwise.demo'
 
     $suppliers = @(Get '/suppliers?page=1&pageSize=100' $procurementOfficer).items
-    $supplierA = $suppliers | Where-Object { $_.name -like 'Supplier A*' } | Select-Object -First 1
-    $supplierB = $suppliers | Where-Object { $_.name -like 'Supplier B*' } | Select-Object -First 1
-    $supplierC = $suppliers | Where-Object { $_.name -like 'Supplier C*' } | Select-Object -First 1
-    Add-Check 'Seeded supplier scenario' ($supplierA.status -eq 'Active' -and $supplierB.status -eq 'Suspended' -and $supplierC.status -eq 'Active') "A=$($supplierA.status), B=$($supplierB.status), C=$($supplierC.status)"
+    # Pin the three SEEDED suppliers by name, and take the lowest Id when a name
+    # has been duplicated by earlier verification runs. Matching with a
+    # 'Supplier B*' wildcard silently picked a later duplicate named 'Supplier B'
+    # (Active) instead of the seeded 'Supplier B Traders' (Suspended), so the
+    # ineligible-supplier scenario broke and the agent legitimately awarded the
+    # cheaper, now-eligible duplicate.
+    $supplierA = $suppliers | Where-Object { $_.name -eq 'Supplier A Building Materials' } | Sort-Object id | Select-Object -First 1
+    $supplierB = $suppliers | Where-Object { $_.name -eq 'Supplier B Traders' } | Sort-Object id | Select-Object -First 1
+    $supplierC = $suppliers | Where-Object { $_.name -eq 'Supplier C Wholesale' } | Sort-Object id | Select-Object -First 1
+    if (-not $supplierA -or -not $supplierB -or -not $supplierC) {
+        throw 'Seeded suppliers (A/B/C) not found. Run the DbSeeder before this verification.'
+    }
+    Add-Check 'Seeded supplier scenario' ($supplierA.status -eq 'Active' -and $supplierB.status -eq 'Suspended' -and $supplierC.status -eq 'Active') "A=$($supplierA.status) (id $($supplierA.id)), B=$($supplierB.status) (id $($supplierB.id)), C=$($supplierC.status) (id $($supplierC.id))"
 
     $stamp = [DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff')
     $request = Post '/material-requests' $engineer @{
@@ -95,6 +104,15 @@ try {
 
     $inspection = Post '/quality-inspections' $inspector @{
         deliveryId = $delivery.id
+        # The five-point quality checklist is mandatory on completion. This
+        # delivery was short and water-damaged, so quantity passed (the received
+        # quantity was reconciled) while visual condition, moisture, packaging
+        # and defects all failed.
+        quantityCheck = $true
+        visualConditionCheck = $false
+        moistureCheck = $false
+        packagingCheck = $false
+        defectsCheck = $false
         items = @(@{ materialId = 1; inspectedQuantity = 240; acceptedQuantity = 235; rejectedQuantity = 5; rejectionReason = 'Water damage during transport.' })
     }
     Add-Check 'C4 quality inspector completes inspection' ($inspection.status -eq 'Completed' -and $inspection.overallDecision -eq 'PartiallyAccepted') "inspection #$($inspection.id)"

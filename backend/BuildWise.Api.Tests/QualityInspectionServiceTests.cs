@@ -1,4 +1,4 @@
-using BuildWise.Api.Data;
+﻿using BuildWise.Api.Data;
 using BuildWise.Api.DTOs;
 using BuildWise.Api.Models.Entities;
 using BuildWise.Api.Models.Enums;
@@ -108,6 +108,15 @@ public class QualityInspectionServiceTests
         {
             DeliveryId = deliveryId,
             InspectorUserId = InspectorUserId,
+            // The five-point checklist is mandatory on completion (Rule 0), so
+            // every inspection built for a test records all five. These default
+            // to "passed" so the existing quantity/NCR cases are unaffected; a
+            // test that wants to exercise a failed check overrides them.
+            QuantityCheck = true,
+            VisualConditionCheck = true,
+            MoistureCheck = true,
+            PackagingCheck = true,
+            DefectsCheck = true,
             Items = new List<InspectionItem>
             {
                 new()
@@ -251,6 +260,125 @@ public class QualityInspectionServiceTests
         var ncr = Assert.Single(await scenario.Db.NonConformances.ToListAsync());
         Assert.Equal(NonConformanceStatus.CorrectiveActionRequired, ncr.Status);
         Assert.Equal("5 bags damaged and water-soaked upon arrival.", ncr.IssueDescription);
+    }
+
+    // A consignment the inspector refused outright must not be recorded as a
+    // partial acceptance. AcceptedQuantity == 0 means every unit of that line was
+    // rejected, so the inspection as a whole is Rejected.
+    [Fact]
+    public async Task CompleteInspection_Returns_Rejected_When_Every_Line_Is_Rejected()
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 240m, accepted: 0m, rejected: 240m,
+            reason: "Entire consignment water-soaked and unusable.");
+
+        var created = await service.CompleteInspectionAsync(inspection);
+
+        Assert.Equal(InspectionDecision.Rejected, created.OverallDecision);
+        Assert.Equal(InspectionStatus.Completed, created.Status);
+
+        // A total rejection still has to be tracked for corrective action.
+        var ncr = Assert.Single(await scenario.Db.NonConformances.ToListAsync());
+        Assert.Equal(NonConformanceStatus.CorrectiveActionRequired, ncr.Status);
+    }
+
+    // One rejected line and one clean line is still a partial acceptance, not a
+    // total rejection: material was accepted, so the consignment is not refused
+    // wholesale.
+    [Fact]
+    public async Task CompleteInspection_Returns_PartiallyAccepted_When_Only_Some_Lines_Are_Rejected()
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 100m, accepted: 0m, rejected: 100m,
+            reason: "Cement fully water-damaged.");
+        inspection.Items.Add(new InspectionItem
+        {
+            MaterialId = scenario.Material.Id,
+            InspectedQuantity = 50m,
+            AcceptedQuantity = 50m,
+            RejectedQuantity = 0m
+        });
+
+        var created = await service.CompleteInspectionAsync(inspection);
+
+        Assert.Equal(InspectionDecision.PartiallyAccepted, created.OverallDecision);
+    }
+
+    // -------------------------------------------------------- Rule 0 checklist
+
+    // The checklist is a quality record: a completed inspection must state the
+    // outcome of all five criteria, not hide a gap inside a blank text field.
+    [Fact]
+    public async Task CompleteInspection_Throws_When_Checklist_Point_Is_Missing()
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 100m, accepted: 100m, rejected: 0m);
+        inspection.PackagingCheck = null; // all other four are set by the helper
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.CompleteInspectionAsync(inspection));
+
+        Assert.Contains("packaging", error.Message);
+        // Nothing is written for a rejected inspection.
+        Assert.Empty(await scenario.Db.Inspections.ToListAsync());
+    }
+
+    // Every point must be supplied — the message names each one that is absent,
+    // so a client can correct the form in one pass.
+    [Fact]
+    public async Task CompleteInspection_Throws_Naming_Every_Missing_Checkpoint()
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 100m, accepted: 100m, rejected: 0m);
+        inspection.QuantityCheck = null;
+        inspection.VisualConditionCheck = null;
+        inspection.MoistureCheck = null;
+        inspection.PackagingCheck = null;
+        inspection.DefectsCheck = null;
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.CompleteInspectionAsync(inspection));
+
+        foreach (var point in new[] { "quantity", "visual condition", "moisture", "packaging", "defects" })
+            Assert.Contains(point, error.Message);
+    }
+
+    // A check is tri-state: false means "inspected and failed", null means "not
+    // inspected". Only null is an error — a failed point must be recorded as
+    // data, not rejected, because it is the most important thing to retain.
+    [Fact]
+    public async Task CompleteInspection_Persists_Failed_Checkpoints_As_False()
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id,
+            inspected: 100m, accepted: 80m, rejected: 20m,
+            reason: "Torn bags.");
+        inspection.VisualConditionCheck = false;
+        inspection.PackagingCheck = false;
+
+        var created = await service.CompleteInspectionAsync(inspection);
+
+        // false is stored as false, and the untouched points stay true.
+        Assert.False(created.VisualConditionCheck);
+        Assert.False(created.PackagingCheck);
+        Assert.True(created.QuantityCheck);
+        Assert.True(created.MoistureCheck);
+        Assert.True(created.DefectsCheck);
     }
 
     [Fact]
@@ -413,6 +541,13 @@ public class QualityInspectionServiceTests
         {
             DeliveryId = scenario.Delivery.Id,
             InspectorUserId = InspectorUserId,
+            // Structured five-point checklist (Rule 0). Packaging and defects
+            // failed, which is what these rejected quantities represent.
+            QuantityCheck = true,
+            VisualConditionCheck = false,
+            MoistureCheck = false,
+            PackagingCheck = false,
+            DefectsCheck = false,
             Items = new List<InspectionItem>
             {
                 new()
@@ -504,6 +639,13 @@ public class QualityInspectionServiceTests
             InspectionCriteria = "Visual and moisture check",
             ObservedResult = "Partially usable",
             Notes = "Segregate damaged bags",
+            // The structured five-point checklist, as both the web and mobile
+            // forms now send it on every completion.
+            QuantityCheck = true,
+            VisualConditionCheck = true,
+            MoistureCheck = true,
+            PackagingCheck = false,
+            DefectsCheck = true,
             Items = new List<InspectionItemInputDto>
             {
                 new(scenario.Material.Id, 240m, 235m, 5m, "Damaged")

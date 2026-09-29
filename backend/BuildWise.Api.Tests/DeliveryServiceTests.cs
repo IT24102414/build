@@ -52,6 +52,54 @@ public class DeliveryServiceTests
     }
 
     [Fact]
+    public async Task RecordDelivery_Rejects_Received_Greater_Than_Ordered()
+    {
+        // Regression: the API accepted 500 received against a 250-unit order and
+        // stored it as an ordinary DiscrepancyReported delivery. A supplier cannot
+        // deliver more than was ordered, so this must be refused outright.
+        var scenario = await SeedScenarioAsync();
+        var service = new DeliveryService(scenario.Db);
+        var delivery = BuildDelivery(scenario);
+        delivery.Items[0].ReceivedQuantity = 500;
+        delivery.Items[0].DamagedQuantity = 50;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.RecordDeliveryAsync(delivery));
+
+        Assert.Contains("cannot exceed the ordered quantity", ex.Message);
+        // Nothing may be persisted when validation fails.
+        Assert.Empty(await scenario.Db.Deliveries.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RecordDelivery_Rejects_Over_Receipt_By_One_Unit()
+    {
+        // Boundary: exactly the ordered quantity is valid, one more is not.
+        var scenario = await SeedScenarioAsync();
+        var service = new DeliveryService(scenario.Db);
+        var delivery = BuildDelivery(scenario);
+        delivery.Items[0].ReceivedQuantity = 251;
+        delivery.Items[0].DamagedQuantity = 0;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.RecordDeliveryAsync(delivery));
+
+        Assert.Empty(await scenario.Db.Deliveries.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RecordDelivery_Accepts_Received_Exactly_Equal_To_Ordered()
+    {
+        var scenario = await SeedScenarioAsync();
+        var service = new DeliveryService(scenario.Db);
+
+        var created = await service.RecordDeliveryAsync(BuildDelivery(scenario));
+
+        Assert.Equal(DeliveryStatus.Received, created.Status);
+        Assert.Single(await scenario.Db.Deliveries.ToListAsync());
+    }
+
+    [Fact]
     public async Task RecordDelivery_Flags_Shortage_And_Damage_As_Discrepancy()
     {
         var scenario = await SeedScenarioAsync();
@@ -64,6 +112,10 @@ public class DeliveryServiceTests
 
         Assert.Equal(DeliveryStatus.DiscrepancyReported, created.Status);
         Assert.Single(await scenario.Db.Deliveries.ToListAsync());
+        var issues = await scenario.Db.DeliveryIssues.Where(issue => issue.DeliveryId == created.Id).ToListAsync();
+        Assert.Equal(2, issues.Count);
+        Assert.Contains(issues, issue => issue.IssueType == DeliveryIssueType.Shortage && issue.Description.Contains("Shortage of 10"));
+        Assert.Contains(issues, issue => issue.IssueType == DeliveryIssueType.Damage && issue.Description.Contains("Sent for inspection: 235"));
     }
 
     [Fact]

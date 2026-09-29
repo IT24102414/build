@@ -48,6 +48,11 @@ public class QualityInspectionService
             InspectionCriteria = dto.InspectionCriteria,
             ObservedResult = dto.ObservedResult,
             Notes = dto.Notes,
+            QuantityCheck = dto.QuantityCheck,
+            VisualConditionCheck = dto.VisualConditionCheck,
+            MoistureCheck = dto.MoistureCheck,
+            PackagingCheck = dto.PackagingCheck,
+            DefectsCheck = dto.DefectsCheck,
             Evidence = (dto.Evidence ?? new()).Select(e => new InspectionEvidence
             {
                 FileName = e.FileName.Trim(), FileUrl = e.FileUrl.Trim(), ContentType = e.ContentType,
@@ -67,6 +72,25 @@ public class QualityInspectionService
     /// </summary>
     public async Task<Inspection> CompleteInspectionAsync(Inspection inspection)
     {
+        // Rule 0: the five-point checklist is mandatory on completion.
+        //
+        // A completed inspection is a quality record, and "did nobody check the
+        // packaging?" must be answerable from the data rather than inferred from
+        // a blank free-text field. Enforcing it here (not in the column type)
+        // keeps legacy rows readable while making every NEW inspection carry all
+        // five points. A check may legitimately be false (it failed); it may not
+        // be absent.
+        var missingChecks = new List<string>();
+        if (inspection.QuantityCheck is null) missingChecks.Add("quantity");
+        if (inspection.VisualConditionCheck is null) missingChecks.Add("visual condition");
+        if (inspection.MoistureCheck is null) missingChecks.Add("moisture");
+        if (inspection.PackagingCheck is null) missingChecks.Add("packaging");
+        if (inspection.DefectsCheck is null) missingChecks.Add("defects");
+        if (missingChecks.Count > 0)
+            throw new InvalidOperationException(
+                "The five-point quality checklist is required: missing " +
+                string.Join(", ", missingChecks) + ".");
+
         // Rule 1: Delivery must exist
         var delivery = await _context.Deliveries
             .Include(d => d.PurchaseOrder)
@@ -126,7 +150,22 @@ public class QualityInspectionService
         var qualityAssessment = agentRun.Output;
 
         inspection.Status = InspectionStatus.Completed;
-        inspection.OverallDecision = hasRejections ? InspectionDecision.PartiallyAccepted : InspectionDecision.Accepted;
+        // The decision is a three-way classification, not a two-way one:
+        //   Rejected          every line was refused outright (AcceptedQuantity == 0)
+        //   PartiallyAccepted some material passed and some did not
+        //   Accepted          nothing was rejected
+        // Validation guarantees Accepted + Rejected == Inspected and that
+        // Inspected > 0, so AcceptedQuantity == 0 means the whole line was rejected.
+        // Previously any rejection mapped to PartiallyAccepted, which made
+        // InspectionDecision.Rejected unreachable and recorded a consignment the
+        // inspector refused outright as a partial acceptance.
+        var allLinesRejected = inspection.Items.Count > 0
+            && inspection.Items.All(i => i.AcceptedQuantity == 0);
+        inspection.OverallDecision = allLinesRejected
+            ? InspectionDecision.Rejected
+            : hasRejections
+                ? InspectionDecision.PartiallyAccepted
+                : InspectionDecision.Accepted;
         inspection.InspectedAt = DateTime.UtcNow;
         inspection.UpdatedAt = DateTime.UtcNow;
 

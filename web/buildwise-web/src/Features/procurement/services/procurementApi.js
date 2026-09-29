@@ -1,6 +1,5 @@
 import { authApi } from '../../../services/authApi'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5078/api'
+import { API_BASE, fetchOrThrow, isNetworkFailure } from '../../../services/apiTransport'
 
 const todayPlus = (days) => {
   const d = new Date()
@@ -75,7 +74,8 @@ async function request(path, { method = 'GET', body, mockFallback } = {}) {
     if (body) headers['Content-Type'] = 'application/json'
     if (session?.token) headers['Authorization'] = `Bearer ${session.token}`
 
-    const res = await fetch(`${API_BASE}${path}`, {
+    const url = `${API_BASE}${path}`
+    const res = await fetchOrThrow(url, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined
@@ -109,7 +109,9 @@ async function request(path, { method = 'GET', body, mockFallback } = {}) {
     if (res.status === 204) return null
     return await res.json()
   } catch (err) {
-    if (mockFallback !== undefined && (err instanceof TypeError || err.message === 'Failed to fetch')) {
+    // Mock fallback still engages on either a real network failure or the
+    // deliberate TypeError thrown above for an unauthenticated 401.
+    if (mockFallback !== undefined && (isNetworkFailure(err) || err instanceof TypeError)) {
       usingMockFallback = true
       return typeof mockFallback === 'function' ? mockFallback() : mockFallback
     }
@@ -123,6 +125,12 @@ const qs = (params = {}) => {
 }
 
 export const procurementApi = {
+  // Project materials budget. Commercial information: readable by the
+  // procurement side only, which the API enforces server-side.
+  getProjectBudget: (projectId) => request(`/projects/${projectId}/budget`),
+  updateProjectBudget: (projectId, materialBudgetAmount) =>
+    request(`/projects/${projectId}/budget`, { method: 'PUT', body: { materialBudgetAmount } }),
+
   // Suppliers
   listSuppliers: (params) => request(`/suppliers${qs(params)}`, { mockFallback: () => ({ items: MOCK.suppliers, total: MOCK.suppliers.length, page: 1, pageSize: MOCK.suppliers.length }) }),
   getSupplier: (id) => request(`/suppliers/${id}`, { mockFallback: () => ({ ...MOCK.suppliers.find((s) => s.id === Number(id)), quotationHistory: MOCK.quotations.filter((q) => q.supplierId === Number(id)).map((q) => ({ quotationId: q.id, materialRequestId: q.materialRequestId, quotationDate: q.quotationDate, validUntil: q.validUntil, status: q.status, totalAmount: q.totalAmount })) }) }),

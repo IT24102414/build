@@ -1,6 +1,7 @@
 using BuildWise.Api.Data;
 using BuildWise.Api.DTOs;
 using BuildWise.Api.Models.Entities;
+using BuildWise.Api.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,9 +38,13 @@ public class AuthService
         if (exists)
             throw new InvalidOperationException($"An account with email '{normalizedEmail}' already exists.");
 
-        var selfRegisterRoles = new[] { "SiteEngineer", "SiteOfficer", "ProcurementOfficer", "QualityInspector" };
+        // Self-service registration is limited to front-line roles. Supplier portal
+        // accounts and all manager/administrator accounts are provisioned by an
+        // existing administrator, because a Supplier account must be bound to a
+        // real supplier record and privileged accounts must not be self-assigned.
+        var selfRegisterRoles = new[] { Roles.SiteEngineer, Roles.SiteOfficer, Roles.ProcurementOfficer, Roles.QualityInspector };
         if (!selfRegisterRoles.Contains(dto.RoleName))
-            throw new ArgumentException("Manager and Administrator accounts must be provisioned by an existing administrator.");
+            throw new ArgumentException("Manager, Administrator and Supplier accounts must be provisioned by an existing administrator.");
 
         var role = await _db.Roles.FirstOrDefaultAsync(r => r.Name == dto.RoleName);
         if (role is null)

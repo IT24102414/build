@@ -26,6 +26,15 @@ public class InspectionConfiguration : IEntityTypeConfiguration<Inspection>
         builder.Property(i => i.ObservedResult).HasMaxLength(2000);
         builder.Property(i => i.Notes).HasMaxLength(2000);
 
+        // The five checklist points are nullable booleans; a failed check is
+        // false, an unchecked/legacy row is null. Keeping them nullable is what
+        // lets "not checked" be distinguished from "checked and failed".
+        builder.Property(i => i.QuantityCheck);
+        builder.Property(i => i.VisualConditionCheck);
+        builder.Property(i => i.MoistureCheck);
+        builder.Property(i => i.PackagingCheck);
+        builder.Property(i => i.DefectsCheck);
+
         builder.Property(i => i.InspectedAt)
             .HasDefaultValueSql("CURRENT_TIMESTAMP");
         builder.Property(i => i.CreatedAt)

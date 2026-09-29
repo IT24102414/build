@@ -68,6 +68,11 @@ class AnalyzeRequest(BaseModel):
     quotations: List[QuotationInput]
     requested_quantities: Dict[str, float]
     required_date: Optional[date] = None  # {material_request_item_id_str: quantity}
+    # Project materials budget. When set, a quotation whose landed cost exceeds
+    # it is flagged BUDGET_EXCEEDED so the approving manager sees the overrun.
+    # It never disqualifies a supplier: over-budget awards remain a legitimate
+    # business decision, so this informs rather than blocks.
+    budget_amount: Optional[float] = None
 
 
 class RankedAlternative(BaseModel):
@@ -282,6 +287,18 @@ def analyze(req: AnalyzeRequest, timeout_s: float = 10.0):
         top_covers = top[1]
         top_name = top[2]
 
+        # Budget risk flag. Informational only: an over-budget award stays a
+        # legitimate business decision, so this informs the approving manager
+        # rather than disqualifying the supplier.
+        budget = getattr(req, "budget_amount", None)
+        top_landed = _landed_cost(top_quotation)
+        budget_exceeded = budget is not None and budget > 0 and top_landed > budget
+        if budget_exceeded:
+            warnings.append(
+                f"Budget exceeds planned amount: '{top_name}' lands at {top_landed:,.2f}, "
+                f"{top_landed - budget:,.2f} over the project materials budget of {budget:,.2f}."
+            )
+
         alternatives: List[RankedAlternative] = []
         risk_flags: List[str] = []
         justification: List[str] = []
@@ -296,6 +313,8 @@ def analyze(req: AnalyzeRequest, timeout_s: float = 10.0):
             if not covers: risk_flags.append(f"PARTIAL_QUANTITY:{name}")
             if history["discrepancy_rate"] > 0: risk_flags.append(f"DELIVERY_DISCREPANCY_HISTORY:{name}")
             if history["rejection_rate"] > 0 or history["ncr_count"] > 0: risk_flags.append(f"QUALITY_HISTORY_REVIEW:{name}")
+            if budget_exceeded and q.quotation_id == top_quotation.quotation_id:
+                risk_flags.append(f"BUDGET_EXCEEDED:{name}")
             alternatives.append(RankedAlternative(
                 quotation_id=q.quotation_id, supplier_id=q.supplier_id, supplier_name=name,
                 rank=i + 1, total_amount=landed, reason=reason
@@ -310,6 +329,17 @@ def analyze(req: AnalyzeRequest, timeout_s: float = 10.0):
                     justification.append(f"Promised delivery {q.promised_delivery_date} is within the required date {req.required_date}.")
                 if q.payment_terms:
                     justification.append(f"Payment terms recorded: {q.payment_terms}.")
+                if budget is not None and budget > 0:
+                    if budget_exceeded and q.quotation_id == top_quotation.quotation_id:
+                        justification.append(
+                            f"Landed cost exceeds the project materials budget of {budget:,.2f} by "
+                            f"{top_landed - budget:,.2f}; requires a documented approval or client variation."
+                        )
+                    else:
+                        justification.append(
+                            f"Within the project materials budget of {budget:,.2f} "
+                            f"({budget - _landed_cost(q):,.2f} remaining)."
+                        )
 
         rationale = (
             f"Selected '{top_name}' (Quotation #{top_quotation.quotation_id}) as the lowest landed-cost compliant supplier "

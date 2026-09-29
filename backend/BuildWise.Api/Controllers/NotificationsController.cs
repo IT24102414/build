@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using BuildWise.Api.Security;
 using BuildWise.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +8,7 @@ namespace BuildWise.Api.Controllers;
 
 [ApiController]
 [Route("api/notifications")]
-[Authorize]
+[Authorize(Policy = Policies.InternalStaffOnly)]
 public class NotificationsController : ControllerBase
 {
     private readonly NotificationService _service;

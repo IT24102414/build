@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/error_widget.dart' as buildwise;
 import '../../../core/widgets/widgets.dart' hide ErrorWidget;
 import '../services/operations_service.dart';
+import '../widgets/agent_analysis_panels.dart';
 
 class MaterialRequestsScreen extends StatefulWidget {
   const MaterialRequestsScreen({super.key, this.service, this.readOnly = false});
@@ -46,6 +47,50 @@ class _MaterialRequestsScreenState extends State<MaterialRequestsScreen> {
       builder: (_) => _CreateRequestSheet(service: widget.service ?? _service),
     );
     if (created == true) _load();
+  }
+
+  /// Runs the RequestAnalysisAgent (:8002) over one material request to surface
+  /// planning risks. Advisory only: it flags urgency, bulk and large-quantity
+  /// risk but never approves, rejects or changes the request.
+  Future<void> _analyzeRequest(Map<String, dynamic> request) async {
+    final id = (request['id'] as num).toInt();
+    await showAiAnalysisSheet(
+      context,
+      title: 'AI Request Analysis — MR-$id',
+      run: () => (widget.service ?? _service).analyzeRequest(id),
+      builder: buildRequestAnalysisPanel,
+    );
+  }
+
+  /// Approve or reject a material request.
+  ///
+  /// This is the authoritative human decision on the request. The
+  /// RequestAnalysisAgent flags risk but never decides, so the request only
+  /// becomes Approved when an authorized manager records that decision here.
+  Future<void> _decide(Map<String, dynamic> request, {required String decision}) async {
+    final id = (request['id'] as num).toInt();
+    final comments = await showDialog<String>(
+      context: context,
+      builder: (_) => _DecisionDialog(decision: decision),
+    );
+    if (comments == null || !mounted) return;
+    try {
+      await (widget.service ?? _service).decideMaterialRequest(
+        id,
+        decision: decision,
+        comments: comments,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Request #$id $decision.')),
+      );
+      _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
 
   @override
@@ -93,12 +138,89 @@ class _MaterialRequestsScreenState extends State<MaterialRequestsScreen> {
                                 label: request['status']?.toString() ?? 'Unknown',
                                 tone: _statusTone(request['status']?.toString()),
                               ),
+                              const SizedBox(height: 12),
+                              AppButton(
+                                label: 'Run AI Analysis',
+                                expand: true,
+                                variant: AppButtonVariant.secondary,
+                                onPressed: () => _analyzeRequest(request),
+                              ),
+                              // Approve/Reject is offered only on a request that
+                              // is actually awaiting a decision, so the control
+                              // never appears on an already-decided request.
+                              if (request['status']?.toString() == 'PendingApproval') ...[
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Approve',
+                                        expand: true,
+                                        onPressed: () => _decide(request, decision: 'Approved'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Reject',
+                                        expand: true,
+                                        variant: AppButtonVariant.danger,
+                                        onPressed: () => _decide(request, decision: 'Rejected'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         );
                       },
                     ),
                   ),
+  );
+}
+
+/// Collects the reviewer's comments before recording an approval decision.
+class _DecisionDialog extends StatefulWidget {
+  const _DecisionDialog({required this.decision});
+
+  final String decision;
+
+  @override
+  State<_DecisionDialog> createState() => _DecisionDialogState();
+}
+
+class _DecisionDialogState extends State<_DecisionDialog> {
+  final _comments = TextEditingController();
+
+  @override
+  void dispose() {
+    _comments.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('${widget.decision} this request?'),
+    content: AppTextField(
+      label: 'Comments',
+      hint: 'Recorded against the request for audit',
+      controller: _comments,
+      maxLines: 3,
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      AppButton(
+        label: widget.decision,
+        variant: widget.decision == 'Rejected'
+            ? AppButtonVariant.danger
+            : AppButtonVariant.primary,
+        onPressed: () => Navigator.of(context).pop(_comments.text.trim()),
+      ),
+    ],
   );
 }
 

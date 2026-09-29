@@ -147,7 +147,80 @@ public class ProcurementValidationService
             result.Errors.Add($"Quotation total mismatch: recorded total is {quotation.TotalAmount}, but calculated sum is {calculatedTotal}.");
         }
 
+        // Rule 11: Budget check against the project's materials allocation.
+        //
+        // This is deliberately a WARNING, not an error. Exceeding the budget is a
+        // legitimate business outcome — the manager may knowingly approve a
+        // higher total to protect the construction schedule, or ask the client for
+        // a variation. Blocking it here would remove the human judgement the
+        // approval gate exists to provide. The flag is surfaced to the manager so
+        // the decision is informed rather than silent.
+        await ApplyBudgetCheckAsync(request, quotation, result);
+
+        // Rule 12: Quotation completeness. Incomplete quotations are still usable
+        // but carry a higher risk, so they are flagged rather than rejected.
+        ApplyCompletenessCheck(quotation, result);
+
         return result;
+    }
+
+    /// <summary>
+    /// Compares the recommended quotation's landed total against the project's
+    /// materials budget. No-op when the project has no budget set.
+    /// </summary>
+    private async Task ApplyBudgetCheckAsync(
+        MaterialRequest request, Quotation quotation, ProcurementValidationResult result)
+    {
+        var project = await _db.Projects
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == request.ProjectId);
+
+        if (project?.MaterialBudgetAmount is not > 0m) return;
+
+        // Landed cost = goods + transport, matching what the agent ranks on.
+        var landedTotal = quotation.TotalAmount + Math.Max(0m, quotation.TransportCharge);
+        var budget = project.MaterialBudgetAmount.Value;
+        var variance = landedTotal - budget;
+
+        if (variance > 0.01m)
+        {
+            result.Warnings.Add(
+                $"Budget exceeds planned amount: quotation #{quotation.Id} totals {landedTotal:N2} including transport, " +
+                $"which is {variance:N2} over the '{project.Name}' materials budget of {budget:N2}. " +
+                "Proceed only with a documented approval or a client-funded variation.");
+        }
+        else
+        {
+            result.Warnings.Add(
+                $"Within budget: quotation #{quotation.Id} totals {landedTotal:N2} against the " +
+                $"materials budget of {budget:N2} for project '{project.Name}' ({Math.Abs(variance):N2} remaining).");
+        }
+    }
+
+    /// <summary>
+    /// Flags quotations that omit commercial terms the procurement team needs.
+    /// These do not disqualify a quotation; they raise its risk.
+    /// <para>
+    /// The missing promised-delivery-date case is deliberately not repeated
+    /// here — it is already reported by the date-consistency rules above.
+    /// </para>
+    /// </summary>
+    private static void ApplyCompletenessCheck(Quotation quotation, ProcurementValidationResult result)
+    {
+        if (string.IsNullOrWhiteSpace(quotation.PaymentTerms))
+        {
+            result.Warnings.Add(
+                $"Quotation #{quotation.Id} is incomplete: no payment terms recorded.");
+        }
+
+        // DateOnly has no subtraction operator, so take the day count explicitly.
+        var daysRemaining = quotation.ValidUntil.DayNumber - DateOnly.FromDateTime(DateTime.UtcNow).DayNumber;
+        if (daysRemaining is >= 0 and < 7)
+        {
+            result.Warnings.Add(
+                $"Quotation #{quotation.Id} expires in {daysRemaining} day(s) on {quotation.ValidUntil:yyyy-MM-dd}; " +
+                "an award made later would need a refreshed quotation.");
+        }
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using BuildWise.Api.Models.Entities;
 using BuildWise.Api.Models.Enums;
+using BuildWise.Api.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,14 +21,80 @@ public static class DbSeeder
     {
         await SeedUsersAsync(db);
         await SeedProcurementScenarioAsync(db);
+        await SeedSupplierPortalAccountsAsync(db);
+    }
+
+    /// <summary>
+    /// Creates one Supplier portal login per Active scenario supplier.
+    /// <para>
+    /// These accounts are what make the "Supplier quotation" step of the
+    /// end-to-end scenario a real actor. Each login is bound to exactly one
+    /// supplier via <c>User.SupplierId</c>, which the API signs into the JWT so
+    /// the portal can scope every query server-side. Passwords use the same
+    /// demo password as the staff accounts.
+    /// </para>
+    /// </summary>
+    private static async Task SeedSupplierPortalAccountsAsync(ApplicationDbContext db)
+    {
+        if (!await db.Roles.AnyAsync(r => r.Name == Roles.Supplier)) return;
+
+        var supplierRole = await db.Roles.FirstAsync(r => r.Name == Roles.Supplier);
+        var hasher = new PasswordHasher<User>();
+        var activeSuppliers = await db.Suppliers
+            .Where(s => s.Status == SupplierStatus.Active)
+            .OrderBy(s => s.Id)
+            .ToListAsync();
+
+        foreach (var supplier in activeSuppliers)
+        {
+            var email = BuildSupplierPortalEmail(supplier);
+            if (await db.Users.AnyAsync(u => u.Email == email)) continue;
+
+            // Never leave a second login silently bound to the same supplier.
+            if (await db.Users.AnyAsync(u => u.SupplierId == supplier.Id)) continue;
+
+            var user = new User
+            {
+                FullName = $"{supplier.ContactPerson ?? supplier.Name} (Portal)",
+                Email = email,
+                SupplierId = supplier.Id,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            user.PasswordHash = hasher.HashPassword(user, DemoPassword);
+            user.UserRoles.Add(new UserRole { Role = supplierRole });
+            db.Users.Add(user);
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Derives a stable portal login from the supplier's own registered email
+    /// address, falling back to a slug of its name. Keeps demo credentials
+    /// predictable without hard-coding one account per supplier.
+    /// </summary>
+    private static string BuildSupplierPortalEmail(Supplier supplier)
+    {
+        var source = !string.IsNullOrWhiteSpace(supplier.Email)
+            ? supplier.Email
+            : $"{supplier.Name}@supplier.invalid";
+
+        var local = source.Split('@')[0].Trim().ToLowerInvariant();
+        var cleaned = new string(local.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_' or '.').ToArray());
+        if (string.IsNullOrWhiteSpace(cleaned)) cleaned = $"supplier{supplier.Id}";
+
+        return $"{cleaned}@portal.buildwise.demo";
     }
 
     private static async Task SeedUsersAsync(ApplicationDbContext db)
     {
         var requiredRoleNames = new[]
         {
-            "Administrator", "SiteEngineer", "ProjectManager", "ProcurementOfficer",
-            "ProcurementManager", "ReceivingOfficer", "QualityInspector", "SiteOfficer", "SiteManager"
+            Roles.Administrator, Roles.SiteEngineer, Roles.ProjectManager, Roles.ProcurementOfficer,
+            Roles.ProcurementManager, Roles.ReceivingOfficer, Roles.QualityInspector, Roles.SiteOfficer,
+            Roles.SiteManager, Roles.Supplier
         };
         var existingRoleNames = await db.Roles.Select(role => role.Name).ToListAsync();
         foreach (var roleName in requiredRoleNames.Where(name => !existingRoleNames.Contains(name)))
@@ -39,15 +106,16 @@ public static class DbSeeder
         var roles = await db.Roles.ToDictionaryAsync(r => r.Name, r => r);
         var hasher = new PasswordHasher<User>();
 
-                (string Name, string Email, string Role)[] demoAccounts =
+        (string Name, string Email, string Role)[] demoAccounts =
         [
-            ("Ada Administrator", "admin@buildwise.demo", "Administrator"),
-            ("Sam SiteEngineer", "site.engineer@buildwise.demo", "SiteEngineer"),
-            ("Nipuni SiteOfficer", "site.officer@buildwise.demo", "SiteOfficer"),
-            ("Priya Officer", "procurement.officer@buildwise.demo", "ProcurementOfficer"),
-            ("Mira Manager", "procurement.manager@buildwise.demo", "ProcurementManager"),
-            ("Nimal Site Manager", "site.manager@buildwise.demo", "SiteManager"),
-            ("Dinesh Inspector", "quality.inspector@buildwise.demo", "QualityInspector"),
+            ("Ada Administrator", "admin@buildwise.demo", Roles.Administrator),
+            ("Sam SiteEngineer", "site.engineer@buildwise.demo", Roles.SiteEngineer),
+            ("Nipuni SiteOfficer", "site.officer@buildwise.demo", Roles.SiteOfficer),
+            ("Ravi Receiver", "receiving.officer@buildwise.demo", Roles.ReceivingOfficer),
+            ("Priya Officer", "procurement.officer@buildwise.demo", Roles.ProcurementOfficer),
+            ("Mira Manager", "procurement.manager@buildwise.demo", Roles.ProcurementManager),
+            ("Nimal Site Manager", "site.manager@buildwise.demo", Roles.SiteManager),
+            ("Dinesh Inspector", "quality.inspector@buildwise.demo", Roles.QualityInspector),
         ];
 
         foreach (var (name, email, roleName) in demoAccounts)
@@ -99,7 +167,7 @@ public static class DbSeeder
         var supplierC = new Supplier { Name = "Supplier C Wholesale", ContactPerson = "Anusha Fernando", Email = "quotes@supplierc.demo", Phone = "+94 11 456 7890", Address = "8 Negombo Road, Gampaha", Status = SupplierStatus.Active, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
         db.Suppliers.AddRange(supplierA, supplierB, supplierC);
 
-        var project = new Project { Name = "Riverside Apartments — Block C", Location = "Colombo 05", Status = ProjectStatus.Active, StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-2)), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        var project = new Project { Name = "Riverside Apartments — Block C", Location = "Colombo 05", Status = ProjectStatus.Active, StartDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(-2)), MaterialBudgetAmount = 5_000_000m, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
         db.Projects.Add(project);
 
         var cement = new Material { Name = "Cement (50kg bag)", Unit = "bag", Category = "Structural Materials", IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };

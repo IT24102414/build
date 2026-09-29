@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
+  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -8,50 +9,106 @@ import {
   StatusBadge,
   TextInput,
   SelectInput,
+  isMaterialRequestDecidable,
+  materialRequestTone,
+  requestAnalysisFlagTone,
+  requestAnalysisFlagLabel,
 } from '../components/shared'
 import { qualityApi } from '../services/qualityApi'
 import { useAuth } from '../auth/AuthContext'
 import './common/common.css'
 
-const STATUS_TONE = {
-  Draft: 'neutral',
-  Submitted: 'info',
-  UnderReview: 'info',
-  PendingApproval: 'warning',
-  RfqInProgress: 'info',
-  AwaitingProcurementApproval: 'warning',
-  Approved: 'success',
-  Ordered: 'info',
-  Completed: 'success',
-  Cancelled: 'neutral',
-  Rejected: 'danger',
-}
+// Status tones and the "still decidable" rule live in
+// components/shared/materialRequestStatus.js, shared with every other surface
+// that reads material requests (procurement queue, dashboard, workspace, RFQ
+// page) so one status can never be highlighted here and greyed out there.
+
+// How often an open queue refreshes itself. The site team submits from their
+// own session (another browser, or the Flutter app) into the same database, so
+// a list fetched once at mount keeps showing the state it loaded at: the
+// Procurement Manager's Material Requests page did not "update" when the Site
+// Engineer created a request — the request was stored (it was visible in the
+// site engineer's own list) but this page never asked the API again. The
+// background refresh below closes that gap; 30s keeps the queue current
+// without hammering the API.
+const AUTO_REFRESH_MS = 30000
 
 export default function MaterialRequestsPage() {
   const { hasRole } = useAuth()
+  // Roles that may record Approve / Reject / Request Revision — mirrors the
+  // backend MaterialRequestApprovalOnly policy.
+  const canApprove = hasRole('ProcurementManager') || hasRole('SiteManager') || hasRole('Administrator')
+  const isSiteUser = hasRole('SiteEngineer') || hasRole('SiteOfficer')
+  // Procurement staff who may read the whole queue but cannot decide: the
+  // Procurement Officer moves an Approved request through RFQ / quotation, so
+  // the Approved rows are precisely the ones they need to see. They were
+  // previously served the PendingApproval-only queue, which hid MR-52.
+  const isProcurementReader = hasRole('ProcurementOfficer')
   const [mode, setMode] = useState('list')
+  const [selected, setSelected] = useState(null)
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [refreshedAt, setRefreshedAt] = useState(null)
 
+  /**
+   * Loads the queue. A `background` refresh (poll, focus, or returning from the
+   * create/review screens) never blanks the table and never replaces visible
+   * rows with an error, so a failed poll cannot take the queue away from the
+   * user; the next tick or the Refresh button retries.
+   *
+   * Memoized so the mount/auto-refresh effects depend on one stable value and
+   * re-run only when the signed-in role set actually changes.
+   */
+  const loadRequests = useCallback(async ({ background = false } = {}) => {
+    if (!background) {
+      setLoading(true)
+      setError(null)
+    }
+    try {
+      const result = isSiteUser
+        ? await qualityApi.listMyMaterialRequests()
+        // Approvers ask for 'all' so every submitted request is reachable and a
+        // decision (PendingApproval → Approved) stays visible in the list.
+        // Asking for no status at all used to send `?status=`, which only worked
+        // because the API happens to treat an empty value as "no filter" — that
+        // is what hid freshly submitted PendingApproval rows from Procurement.
+        // Read-only roles keep the pending queue.
+        // Procurement readers (approvers and the Procurement Officer) ask for
+        // 'all': the Officer's work starts once a request is Approved, so a
+        // pending-only queue hid exactly the rows they act on (e.g. MR-52).
+        : await qualityApi.listMaterialRequests(canApprove || isProcurementReader ? 'all' : undefined)
+      setRequests(result)
+      setRefreshedAt(new Date())
+      setError(null)
+    } catch (err) {
+      if (!background) setError(err.message)
+    } finally {
+      if (!background) setLoading(false)
+    }
+  }, [canApprove, isSiteUser, isProcurementReader])
+
+  // First paint loads with the spinner; every later pass is a background
+  // refresh. Re-runs only if the signed-in role set changes.
   useEffect(() => {
     loadRequests()
-  }, []) // Auth session is stable for the lifetime of this authenticated shell.
+  }, [loadRequests])
 
-  async function loadRequests() {
-    setLoading(true)
-    setError(null)
-    try {
-      const result = (hasRole('SiteEngineer') || hasRole('SiteOfficer'))
-        ? await qualityApi.listMyMaterialRequests()
-        : await qualityApi.listMaterialRequests()
-      setRequests(result)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+  // Keep the queue current while the page is open: poll while the tab is
+  // visible, and refresh the moment it is focused again (the manager tabbing
+  // back from the site engineer's screen) — never a manual browser reload.
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') loadRequests({ background: true })
     }
-  }
+    const timer = setInterval(refreshIfVisible, AUTO_REFRESH_MS)
+    window.addEventListener('focus', refreshIfVisible)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('focus', refreshIfVisible)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
+  }, [loadRequests])
 
   if (mode === 'list') {
     return (
@@ -59,13 +116,29 @@ export default function MaterialRequestsPage() {
         <div className="toolbar">
           <PageHeader
             title="Material Requests"
-            description="Component 1 — site engineers submit material requests for approval."
+            description="Site teams submit material requests; managers review them here and Approve, Reject, or Request Revision."
           />
-          {(hasRole('SiteEngineer') || hasRole('SiteOfficer')) ? (
-            <button type="button" className="primary-button" onClick={() => setMode('create')}>
-              + Create Request
-            </button>
-          ) : null}
+          <div className="toolbar__filters">
+            {refreshedAt && (
+              <span className="activity-time" role="status">
+                Updated {refreshedAt.toLocaleTimeString()}
+              </span>
+            )}
+            <Button
+              variant="secondary"
+              disabled={loading}
+              // Manual escape hatch alongside the auto-refresh, for a manager who
+              // wants the newest request now instead of at the next tick.
+              onClick={() => loadRequests({ background: true })}
+            >
+              Refresh
+            </Button>
+            {isSiteUser ? (
+              <Button onClick={() => setMode('create')}>
+                + Create Request
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {loading && <LoadingState />}
@@ -73,7 +146,10 @@ export default function MaterialRequestsPage() {
         {!loading && !error && (
           <Card>
             {requests.length === 0 ? (
-              <EmptyState title="No material requests" message="Submitted requests will appear here." />
+              <EmptyState
+                title="No material requests"
+                message={canApprove ? 'Requests awaiting your approval will appear here.' : 'Submitted requests will appear here.'}
+              />
             ) : (
               <table className="data-table">
                 <thead>
@@ -81,8 +157,10 @@ export default function MaterialRequestsPage() {
                     <th>#</th>
                     <th>Project</th>
                     <th>Required Date</th>
+                    <th>Priority</th>
                     <th>Items</th>
                     <th>Status</th>
+                    {(canApprove || isSiteUser || isProcurementReader) && <th>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -91,12 +169,51 @@ export default function MaterialRequestsPage() {
                       <td>{r.id}</td>
                       <td>{r.projectName || `Project #${r.projectId}`}</td>
                       <td>{r.requiredDate}</td>
+                      <td>{r.priority}</td>
                       <td>{r.itemCount}</td>
                       <td>
-                        <StatusBadge tone={STATUS_TONE[r.status] ?? 'neutral'}>
+                        <StatusBadge status={materialRequestTone(r.status)}>
                           {r.status}
                         </StatusBadge>
                       </td>
+                      {(isSiteUser || isProcurementReader) && (
+                        <td>
+                          {/* Site roles now see the whole site queue (read-only),
+                              so they need a way to open a colleague's request and
+                              watch its status change after a manager decides.
+                              No analysis or decision controls here — those stay
+                              with approvers. */}
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              setSelected(r)
+                              setMode('review')
+                            }}
+                          >
+                            View
+                          </Button>
+                        </td>
+                      )}
+                      {canApprove && (
+                        <td>
+                          {/* An approver must be able to open *any* request in
+                              their queue, not only an undecided one: MR-52 and
+                              friends are already Approved, so gating the row on
+                              isMaterialRequestDecidable left no way to reach the
+                              request at all — and therefore no way to run the
+                              Step 3 analysis on it. The label still reflects
+                              what opening the row will let them do. */}
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              setSelected(r)
+                              setMode('review')
+                            }}
+                          >
+                            {isMaterialRequestDecidable(r.status) ? 'Review' : 'View & Analyze'}
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -108,7 +225,39 @@ export default function MaterialRequestsPage() {
     )
   }
 
-    return <CreateRequestForm onCancel={() => setMode('list')} />
+  if (mode === 'review' && selected) {
+    return (
+      <ReviewRequest
+        request={selected}
+        canApprove={canApprove}
+        isSiteUser={isSiteUser}
+        isProcurementReader={isProcurementReader}
+        onBack={() => {
+          setSelected(null)
+          setMode('list')
+          // Returning to the queue re-reads it (silently, so the table does not
+          // flash) — the decision just recorded is reflected immediately.
+          loadRequests({ background: true })
+        }}
+      />
+    )
+  }
+
+  if (mode === 'create') {
+    return (
+      <CreateRequestForm
+        onCancel={() => {
+          setMode('list')
+          // Returning from the form re-reads the queue in the background, so
+          // the request just created is already in the site engineer's own
+          // list instead of only in the database.
+          loadRequests({ background: true })
+        }}
+      />
+    )
+  }
+
+  return null
 }
 
 // ------------------------------------------------------------------ Form
@@ -188,9 +337,11 @@ function CreateRequestForm({ onCancel }) {
           title="Request submitted"
           message="Your material request has been created and is now awaiting approval."
         />
-        <button type="button" className="text-button" onClick={onCancel}>
-          ← Back to list
-        </button>
+        <div className="form-actions">
+          <Button variant="secondary" onClick={onCancel}>
+            ← Back to list
+          </Button>
+        </div>
       </Card>
     )
   }
@@ -308,14 +459,300 @@ function CreateRequestForm({ onCancel }) {
         </div>
 
         <div className="form-actions">
-          <button type="button" className="text-button" onClick={onCancel} disabled={submitting}>
+          <Button variant="secondary" onClick={onCancel} disabled={submitting}>
             Cancel
-          </button>
-          <button type="submit" className="primary-button" disabled={submitting}>
+          </Button>
+          <Button type="submit" disabled={submitting}>
             {submitting ? 'Submitting…' : 'Submit Request'}
-          </button>
+          </Button>
         </div>
       </Card>
     </form>
   )
 }
+
+// --------------------------------------------------------------- Review
+// STEP 2 of the material-request journey: the Procurement Manager opens a
+// pending request, reads what the site asked for, and records Approve /
+// Reject / Request Revision. Approving flips the request to Approved, which
+// is what unlocks procurement (quotations → analysis → purchase order).
+
+function ReviewRequest({ request, canApprove, isSiteUser, isProcurementReader, onBack }) {
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [reloadToken, setReloadToken] = useState(0)
+  const [comment, setComment] = useState('')
+  const [actionError, setActionError] = useState(null)
+  const [deciding, setDeciding] = useState(false)
+  const [outcome, setOutcome] = useState(null)
+  // Step 3 — RequestAnalysisAgent. Kept separate from `actionError`/`deciding`
+  // because analysis is advisory: a failure here must never be confused with a
+  // failed approval, and it must not disable the Approve/Reject buttons.
+  const [analysis, setAnalysis] = useState(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    qualityApi
+      .getMaterialRequest(request.id)
+      .then((data) => { if (!cancelled) setDetail(data) })
+      .catch((err) => { if (!cancelled) setError(err.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [request.id, reloadToken])
+
+  const status = detail?.status ?? request.status
+  const decidable = canApprove && isMaterialRequestDecidable(status)
+
+  async function decide(decision) {
+    // The backend hard-blocks Rejected without comments; mirror that (and the
+    // revision convention from ProcurementApprovalPanel) in the UI so the
+    // manager never gets a surprise 400.
+    if (decision !== 'Approved' && !comment.trim()) {
+      setActionError(
+        decision === 'Rejected'
+          ? 'A comment is required when rejecting a request.'
+          : 'Add a comment explaining what needs to be revised.'
+      )
+      return
+    }
+    setActionError(null)
+    setDeciding(true)
+    try {
+      await qualityApi.decideMaterialRequest(request.id, decision, comment.trim() || null)
+      setOutcome(decision)
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setDeciding(false)
+    }
+  }
+
+  // Step 3: ask the RequestAnalysisAgent to review this request and surface the
+  // flags it returns (e.g. HIGH_URGENCY, LARGE_QUANTITY_ORDER). The result is
+  // advisory only — it never changes the request status and never records a
+  // decision; the manager still approves by hand.
+  async function runAnalysis() {
+    setAnalyzing(true)
+    setAnalysisError(null)
+    try {
+      const result = await qualityApi.analyzeRequest(request.id)
+      // The backend echoes the id it analysed. Ignore a response for a
+      // different request rather than showing another request's flags.
+      if (result && result.requestId != null && result.requestId !== request.id) {
+        setAnalysisError('The analysis response did not match this request. Please try again.')
+        return
+      }
+      setAnalysis(result)
+    } catch (err) {
+      setAnalysisError(err.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  if (outcome) {
+    const copy = {
+      Approved: {
+        title: `Request #${request.id} approved`,
+        message: 'MR is now Approved — procurement can begin (quotations, analysis, then a purchase order).',
+      },
+      Rejected: {
+        title: `Request #${request.id} rejected`,
+        message: 'The request was rejected. The site team can revise and resubmit it.',
+      },
+      RevisionRequested: {
+        title: `Revision requested on #${request.id}`,
+        message: 'The request was sent back to the site team with your comments.',
+      },
+    }[outcome]
+    return (
+      <div className="stack">
+        <PageHeader title={`Material Request #${request.id}`} description="Decision recorded." />
+        <Card>
+          <EmptyState title={copy.title} message={copy.message} />
+          <div className="form-actions">
+            <Button onClick={onBack}>Back to list</Button>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+
+  return (
+    <div className="stack">
+      <PageHeader
+        title={`Material Request #${request.id}`}
+        description={
+          canApprove
+            ? 'Review the request, then Approve, Reject, or Request Revision.'
+            : 'Request details.'
+        }
+      />
+
+      {loading && <LoadingState />}
+      {error && <ErrorState message={error} onRetry={() => setReloadToken((t) => t + 1)} />}
+
+      {!loading && !error && detail && (
+        <Card>
+          <div className="detail-row">
+            <span className="detail-row__label">Status</span>
+            <span className="detail-row__value">
+              <StatusBadge status={materialRequestTone(status)}>{status}</StatusBadge>
+            </span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-row__label">Project</span>
+            <span className="detail-row__value">{detail.projectName || `Project #${detail.projectId}`}</span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-row__label">Priority</span>
+            <span className="detail-row__value">{detail.priority}</span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-row__label">Required date</span>
+            <span className="detail-row__value">{detail.requiredDate}</span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-row__label">Reason</span>
+            <span className="detail-row__value">{detail.reason || '—'}</span>
+          </div>
+          <div className="detail-row">
+            <span className="detail-row__label">Items</span>
+            <span className="detail-row__value">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Material</th>
+                    <th>Quantity</th>
+                    <th>Unit</th>
+                    <th>Specification</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(detail.items ?? []).map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.materialName}</td>
+                      <td>{item.requestedQuantity}</td>
+                      <td>{item.unit}</td>
+                      <td>{item.description || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </span>
+          </div>
+        </Card>
+      )}
+
+
+      {!loading && !error && detail && canApprove && (
+        <Card
+          title="Request Analysis"
+          subtitle="Runs the RequestAnalysisAgent over this request to surface planning risks. Advisory only — it does not approve or change the request."
+        >
+          <div className="form-actions">
+            <Button variant="secondary" onClick={runAnalysis} disabled={analyzing}>
+              {analyzing ? 'Analyzing…' : analysis ? 'Re-run Analysis' : 'Analyze Request'}
+            </Button>
+          </div>
+
+          {analysisError && (
+            <div style={{ marginTop: 'var(--bw-space-4, 1rem)' }}>
+              <ErrorState message={analysisError} />
+            </div>
+          )}
+
+          {analysis && (
+            <div style={{ marginTop: 'var(--bw-space-4, 1rem)' }}>
+              <div className="detail-row">
+                <span className="detail-row__label">Agent</span>
+                <span className="detail-row__value">RequestAnalysisAgent</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-row__label">Status</span>
+                <span className="detail-row__value">{analysis.status}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-row__label">Flags</span>
+                <span className="detail-row__value">
+                  {(analysis.flags ?? []).length === 0 ? (
+                    'No flags raised.'
+                  ) : (
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: '0.5rem' }}>
+                      {analysis.flags.map((flag) => (
+                        <li key={flag} style={{ display: 'grid', gap: '0.25rem' }}>
+                          <StatusBadge status={requestAnalysisFlagTone(flag)}>
+                            {flag}
+                          </StatusBadge>
+                          <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>
+                            {requestAnalysisFlagLabel(flag)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {!loading && !error && detail && (
+        <Card
+          title="Decision"
+          subtitle={
+            decidable
+              ? 'Approve to start procurement, or send it back with a comment.'
+              : isSiteUser || isProcurementReader
+                // Site roles and the Procurement Officer have read-only
+                // visibility. Saying "only managers can decide" here would read
+                // as if the request were broken; it simply is not theirs to
+                // decide. The Officer's next step is RFQ / quotation instead.
+                ? isProcurementReader
+                  ? 'Read-only. A Procurement Manager or Site Manager decides. Your next step is to raise an RFQ or record quotations for an approved request.'
+                  : 'Read-only. A Procurement Manager or Site Manager approves, rejects, or requests a revision.'
+                : 'Only Procurement Managers, Site Managers and Administrators can decide, and only while the request is awaiting approval.'
+          }
+        >
+          {actionError && <ErrorState message={actionError} />}
+          {decidable && (
+            <TextInput
+              label="Comment"
+              name="comment"
+              multiline
+              placeholder="Optional for Approve; required for Reject and Request Revision"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+            />
+          )}
+          <div className="form-actions">
+            <Button variant="secondary" onClick={onBack} disabled={deciding}>
+              Back to list
+            </Button>
+            {decidable && (
+              <>
+                <Button variant="primary" onClick={() => decide('Approved')} disabled={deciding}>
+                  {deciding ? 'Saving…' : 'Approve'}
+                </Button>
+                <Button variant="danger" onClick={() => decide('Rejected')} disabled={deciding}>
+                  Reject
+                </Button>
+                <Button variant="secondary" onClick={() => decide('RevisionRequested')} disabled={deciding}>
+                  Request Revision
+                </Button>
+              </>
+            )}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+

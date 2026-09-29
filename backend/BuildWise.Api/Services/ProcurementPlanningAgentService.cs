@@ -41,7 +41,8 @@ public class ProcurementPlanningAgentService
             i.Unit ?? materials.GetValueOrDefault(i.MaterialId)?.Unit ?? "Units", i.RequestedQuantity)).ToList();
         var facts = new ProcurementPlanningInputFacts(request.Id, request.ProjectId,
             request.Project?.Name ?? $"Project #{request.ProjectId}", request.Project?.Status.ToString() ?? "Unknown",
-            request.RequestDate, request.RequiredDate, request.Priority.ToString(), request.Status.ToString(), items, quotations.Count);
+            request.RequestDate, request.RequiredDate, request.Priority.ToString(), request.Status.ToString(), items, quotations.Count,
+            request.Project?.MaterialBudgetAmount);
         var objective = string.IsNullOrWhiteSpace(input.Objective)
             ? $"Create a controlled procurement plan for material request #{request.Id}."
             : input.Objective.Trim();
@@ -59,7 +60,8 @@ public class ProcurementPlanningAgentService
             "Supplier must be Active.", "Quotation must be unexpired and belong to the request.",
             "Quotation must cover requested materials and totals must reconcile.",
             "Recommendation must reference a real supported quotation.",
-            "Purchase-order authorization requires an approved authorized-manager decision."
+            "Purchase-order authorization requires an approved authorized-manager decision.",
+            "If the project has a materials budget, compare the landed total against it and flag any overrun."
         };
         var toolResults = new List<ProcurementPlanningToolResult>
         {
@@ -86,6 +88,25 @@ public class ProcurementPlanningAgentService
         if (quotations.Any(q => q.Supplier?.Status != SupplierStatus.Active)) flags.Add("INELIGIBLE_SUPPLIER_PRESENT");
         if (quotations.Any(q => q.ValidUntil < today)) flags.Add("EXPIRED_QUOTATION_PRESENT");
         if (quotations.Any(q => q.Status != QuotationStatus.Submitted)) flags.Add("NON_SUBMITTED_QUOTATION_PRESENT");
+
+        // Budget headroom: a warning when even the cheapest eligible quotation
+        // cannot fit inside the project allocation.
+        var budget = request.Project?.MaterialBudgetAmount;
+        if (budget is > 0m)
+        {
+            var cheapest = quotations
+                .Where(q => q.Supplier?.Status == SupplierStatus.Active && q.ValidUntil >= today)
+                .Select(q => q.TotalAmount + Math.Max(0m, q.TransportCharge))
+                .ToList();
+            if (cheapest.Count > 0 && cheapest.Min() > budget.Value)
+            {
+                flags.Add("ALL_QUOTATIONS_EXCEED_BUDGET");
+            }
+            else if (cheapest.Count > 0 && cheapest.Min() > budget.Value * 0.9m)
+            {
+                flags.Add("BUDGET_HEADROOM_LOW");
+            }
+        }
         return flags.Distinct().ToList();
     }
 

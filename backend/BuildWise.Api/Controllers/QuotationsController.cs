@@ -4,13 +4,14 @@ using BuildWise.Api.Models.Entities;
 using BuildWise.Api.Models.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using BuildWise.Api.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace BuildWise.Api.Controllers;
 
 [ApiController]
 [Route("api")]
-[Authorize(Roles = "ProcurementOfficer,ProcurementManager,SiteManager,Administrator")]
+[Authorize(Policy = Policies.ProcurementStaffAndAdmin)]
 public class QuotationsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
@@ -26,7 +27,7 @@ public class QuotationsController : ControllerBase
     /// Get all quotations recorded against an approved material request.
     /// </summary>
     [HttpGet("material-requests/{requestId:int}/quotations")]
-    [Authorize(Roles = "ProcurementOfficer,ProcurementManager,Administrator,SiteManager")]
+    [Authorize(Policy = Policies.ProcurementStaffAndAdmin)]
     public async Task<ActionResult<IEnumerable<QuotationDto>>> GetQuotationsForRequest(int requestId)
     {
         var quotations = await _db.Quotations
@@ -46,7 +47,7 @@ public class QuotationsController : ControllerBase
     /// Get single quotation by id with line items.
     /// </summary>
     [HttpGet("quotations/{id:int}")]
-    [Authorize(Roles = "ProcurementOfficer,ProcurementManager,Administrator,SiteManager")]
+    [Authorize(Policy = Policies.ProcurementStaffAndAdmin)]
     public async Task<ActionResult<QuotationDto>> GetById(int id)
     {
         var quotation = await _db.Quotations
@@ -67,7 +68,7 @@ public class QuotationsController : ControllerBase
     /// Enforces: request must be Approved, total is auto-calculated by API from quantity * unit_price.
     /// </summary>
     [HttpPost("material-requests/{requestId:int}/quotations")]
-    [Authorize(Roles = "ProcurementOfficer,Administrator")]
+    [Authorize(Policy = Policies.SupplierAdministrationOnly)]
     public async Task<ActionResult<QuotationDto>> Create(int requestId, CreateQuotationDto dto)
     {
         var request = await _db.MaterialRequests
@@ -172,7 +173,7 @@ public class QuotationsController : ControllerBase
     /// One row per requested item, columns per supplier quotation with coverage and price indicators.
     /// </summary>
     [HttpGet("material-requests/{requestId:int}/quotations/compare")]
-    [Authorize(Roles = "ProcurementOfficer,ProcurementManager,Administrator,SiteManager")]
+    [Authorize(Policy = Policies.ProcurementStaffAndAdmin)]
     public async Task<ActionResult<QuotationComparisonResponseDto>> Compare(int requestId)
     {
         var request = await _db.MaterialRequests

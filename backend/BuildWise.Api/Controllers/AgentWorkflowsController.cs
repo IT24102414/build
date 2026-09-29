@@ -1,5 +1,6 @@
 using BuildWise.Api.Data;
 using BuildWise.Api.DTOs;
+using BuildWise.Api.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,7 @@ namespace BuildWise.Api.Controllers;
 /// <summary>Read-only operational monitoring for persisted agent executions.</summary>
 [ApiController]
 [Route("api/agent-workflows")]
-[Authorize(Roles = "ProcurementOfficer,ProcurementManager,SiteManager,Administrator")]
+[Authorize(Policy = Policies.ProcurementStaffAndAdmin)]
 public class AgentWorkflowsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;

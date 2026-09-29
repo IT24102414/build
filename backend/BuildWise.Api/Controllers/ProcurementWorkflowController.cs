@@ -2,13 +2,14 @@ using System.Security.Claims;
 using BuildWise.Api.DTOs;
 using BuildWise.Api.Services;
 using Microsoft.AspNetCore.Authorization;
+using BuildWise.Api.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BuildWise.Api.Controllers;
 
 [ApiController]
 [Route("api")]
-[Authorize(Roles = "ProcurementOfficer,ProcurementManager,SiteManager,Administrator")]
+[Authorize(Policy = Policies.ProcurementStaffAndAdmin)]
 public class ProcurementWorkflowController : ControllerBase
 {
     private readonly ProcurementWorkflowService _workflowService;

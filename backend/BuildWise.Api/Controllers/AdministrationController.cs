@@ -3,13 +3,14 @@ using BuildWise.Api.DTOs;
 using BuildWise.Api.Models.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using BuildWise.Api.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace BuildWise.Api.Controllers;
 
 [ApiController]
 [Route("api/admin")]
-[Authorize(Roles = "Administrator")]
+[Authorize(Roles = Roles.Administrator)]
 public class AdministrationController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
@@ -69,8 +70,31 @@ public class AdministrationController : ControllerBase
         var services = new Dictionary<string, bool>();
         foreach (var (name, key) in new[] { ("quotation-agent", "AgentService:Url"), ("request-agent", "AgentService:RequestUrl"), ("delivery-agent", "AgentService:DeliveryUrl"), ("quality-agent", "AgentService:QualityUrl") })
         {
-            try { using var response = await _httpClientFactory.CreateClient().GetAsync($"{_configuration[key]}/health", new CancellationTokenSource(TimeSpan.FromSeconds(2)).Token); services[name] = response.IsSuccessStatusCode; }
-            catch { services[name] = false; }
+            // Trim trailing slashes before appending the path. The configured
+            // base URLs are inconsistent (AgentService:Url has no trailing
+            // slash, the other three do), so concatenating naively produced
+            // "http://127.0.0.1:8002//health" for three of the four agents.
+            // That double slash is a 404, so the check reported healthy agents
+            // as unreachable and flipped the whole system to "degraded".
+            // Normalising here fixes the probe regardless of how the URL is
+            // written in configuration or overridden by environment variable.
+            var configured = _configuration[key];
+            if (string.IsNullOrWhiteSpace(configured))
+            {
+                services[name] = false;
+                continue;
+            }
+            var baseUrl = configured!.TrimEnd('/');
+            try
+            {
+                using var response = await _httpClientFactory.CreateClient()
+                    .GetAsync($"{baseUrl}/health", new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+                services[name] = response.IsSuccessStatusCode;
+            }
+            catch
+            {
+                services[name] = false;
+            }
         }
         return Ok(new SystemHealthDto(database && services.Values.All(v => v) ? "healthy" : "degraded", database, services, DateTime.UtcNow));
     }

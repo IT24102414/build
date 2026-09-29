@@ -118,7 +118,7 @@ export default function AgentWorkflowsPage() {
                   <tr key={workflow.id}>
                     <td>{workflow.id}</td>
                     <td>{workflow.objective}</td>
-                    <td><StatusBadge tone={statusTone(workflow.status)}>{workflow.status}</StatusBadge></td>
+                    <td><StatusBadge status={statusTone(workflow.status)}>{workflow.status}</StatusBadge></td>
                     <td>{workflow.approvalStatus}</td>
                     <td>{workflow.stepCount} ({workflow.failedStepCount} failed)</td>
                     <td>{new Date(workflow.createdAt).toLocaleString()}</td>

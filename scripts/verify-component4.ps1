@@ -29,6 +29,15 @@ if ([decimal]$item.receivedQuantity -ge 5) { $rejected = 5 } else { $rejected = 
 $accepted = [decimal]$item.receivedQuantity - $rejected
 $payload = @{
     deliveryId = $delivery.id
+    # The five-point quality checklist is mandatory on completion. This
+    # delivery arrived with damaged material, so quantity passed while
+    # visual condition, moisture, packaging and defects failed.
+    quantityCheck = $true
+    visualConditionCheck = $false
+    moistureCheck = $false
+    packagingCheck = $false
+    defectsCheck = $false
+
     inspectionCriteria = 'Quantity, visual condition, moisture and packaging verification'
     observedResult = 'Partially accepted; damaged material segregated'
     notes = 'Component 4 automated acceptance verification'

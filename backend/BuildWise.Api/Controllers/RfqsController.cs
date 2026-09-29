@@ -5,13 +5,14 @@ using BuildWise.Api.Models.Entities;
 using BuildWise.Api.Models.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using BuildWise.Api.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace BuildWise.Api.Controllers;
 
 [ApiController]
 [Route("api/rfqs")]
-[Authorize(Roles = "ProcurementOfficer,ProcurementManager,SiteManager,Administrator")]
+[Authorize(Policy = Policies.ProcurementStaffAndAdmin)]
 public class RfqsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
@@ -47,7 +48,7 @@ public class RfqsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "ProcurementOfficer,Administrator")]
+    [Authorize(Policy = Policies.SupplierAdministrationOnly)]
     public async Task<ActionResult<RfqDto>> Create([FromBody] CreateRfqRequestDto dto)
     {
         var request = await _db.MaterialRequests.FirstOrDefaultAsync(r => r.Id == dto.MaterialRequestId);
@@ -80,7 +81,7 @@ public class RfqsController : ControllerBase
     }
 
     [HttpPost("{id:int}/suppliers")]
-    [Authorize(Roles = "ProcurementOfficer,Administrator")]
+    [Authorize(Policy = Policies.SupplierAdministrationOnly)]
     public async Task<ActionResult<RfqDto>> AddSuppliers(int id, [FromBody] AddRfqSuppliersRequestDto dto)
     {
         var rfq = await _db.Rfqs.Include(r => r.Suppliers).FirstOrDefaultAsync(r => r.Id == id);
@@ -98,7 +99,7 @@ public class RfqsController : ControllerBase
     }
 
     [HttpPost("{id:int}/close")]
-    [Authorize(Roles = "ProcurementOfficer,ProcurementManager,Administrator")]
+    [Authorize(Policy = Policies.ProcurementStaffOnly)]
     public async Task<ActionResult<RfqDto>> Close(int id, [FromBody] CloseRfqRequestDto? request)
     {
         var rfq = await _db.Rfqs.FirstOrDefaultAsync(r => r.Id == id);

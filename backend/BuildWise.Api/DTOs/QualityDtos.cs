@@ -16,6 +16,16 @@ public class CompleteInspectionDto
     public string? InspectionCriteria { get; set; }
     public string? ObservedResult { get; set; }
     public string? Notes { get; set; }
+
+    // The five-point quality checklist. Nullable on input so the service can
+    // tell "not provided" apart from an explicit false (a failed check);
+    // completion is rejected unless all five are supplied.
+    public bool? QuantityCheck { get; set; }
+    public bool? VisualConditionCheck { get; set; }
+    public bool? MoistureCheck { get; set; }
+    public bool? PackagingCheck { get; set; }
+    public bool? DefectsCheck { get; set; }
+
     public List<InspectionEvidenceDto> Evidence { get; set; } = new();
     public List<InspectionItemInputDto> Items { get; set; } = new();
 }
@@ -39,7 +49,16 @@ public record InspectionSummaryDto(
     string? ObservedResult,
     string? Notes,
     int ItemCount,
-    int EvidenceCount
+    int EvidenceCount,
+    // The five-point checklist, surfaced so a client can render each criterion
+    // as its own pass/fail row. Null means the check was never recorded (a
+    // legacy inspection predating the structured checklist), which is why this
+    // is nullable rather than a defaulted true.
+    bool? QuantityCheck,
+    bool? VisualConditionCheck,
+    bool? MoistureCheck,
+    bool? PackagingCheck,
+    bool? DefectsCheck
 );
 
 public record NotificationDto(

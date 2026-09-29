@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/error_widget.dart' as buildwise;
 import '../../../core/widgets/widgets.dart' hide ErrorWidget;
 import '../services/operations_service.dart';
+import '../widgets/agent_analysis_panels.dart';
 
 class DeliveryReceivingScreen extends StatefulWidget {
   const DeliveryReceivingScreen({super.key, this.service, this.readOnly = false});
@@ -16,6 +17,7 @@ class DeliveryReceivingScreen extends StatefulWidget {
 class _DeliveryReceivingScreenState extends State<DeliveryReceivingScreen> {
   final _service = OperationsService();
   List<Map<String, dynamic>> _orders = const [];
+  List<Map<String, dynamic>> _deliveries = const [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
   String? _error;
@@ -30,12 +32,31 @@ class _DeliveryReceivingScreenState extends State<DeliveryReceivingScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final orders = await (widget.service ?? _service).listConfirmedOrders();
-      if (mounted) setState(() => _orders = orders);
+      final deliveries = await (widget.service ?? _service).listDeliveries();
+      if (mounted) {
+        setState(() {
+          _orders = orders;
+          _deliveries = deliveries;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Runs the DeliveryDiscrepancyAgent (:8003) over one recorded delivery. The
+  /// agent is read-only: it reports shortage and damage but never changes the
+  /// delivery status or creates a discrepancy record.
+  Future<void> _analyzeDelivery(Map<String, dynamic> delivery) async {
+    final id = (delivery['id'] as num).toInt();
+    await showAiAnalysisSheet(
+      context,
+      title: 'AI Delivery Discrepancy Analysis — DEL-$id',
+      run: () => (widget.service ?? _service).analyzeDeliveryDiscrepancy(id),
+      builder: buildDeliveryAnalysisPanel,
+    );
   }
 
   @override
@@ -72,10 +93,78 @@ class _DeliveryReceivingScreenState extends State<DeliveryReceivingScreen> {
                           onSaved: _load,
                         )),
                       ],
+                      const SizedBox(height: 28),
+                      Text('Recorded Deliveries', style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Run the Delivery Discrepancy Agent over a received delivery to detect '
+                        'shortage, over-receipt and damage.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 10),
+                      if (_deliveries.isEmpty)
+                        const AppCard(child: Text('No deliveries recorded yet.'))
+                      else
+                        ..._deliveries.map((delivery) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _DeliveryCard(
+                                delivery: delivery,
+                                onAnalyze: () => _analyzeDelivery(delivery),
+                              ),
+                            )),
                     ],
                   ),
   );
 }
+
+/// One recorded delivery plus the action that runs the delivery agent over it.
+class _DeliveryCard extends StatelessWidget {
+  const _DeliveryCard({required this.delivery, required this.onAnalyze});
+
+  final Map<String, dynamic> delivery;
+  final VoidCallback onAnalyze;
+
+  @override
+  Widget build(BuildContext context) {
+    final id = (delivery['id'] as num?)?.toInt() ?? 0;
+    final status = delivery['status']?.toString() ?? 'Unknown';
+    final items = delivery['items'] as List<dynamic>? ?? const [];
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('DEL-$id', style: Theme.of(context).textTheme.titleMedium),
+              StatusChip(label: status, tone: _deliveryTone(status)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${delivery['deliveryReference'] ?? 'no reference'} · ${items.length} item(s)',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          AppButton(
+            label: 'Run AI Analysis',
+            expand: true,
+            variant: AppButtonVariant.secondary,
+            onPressed: onAnalyze,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+StatusTone _deliveryTone(String status) => switch (status) {
+      'Received' => StatusTone.success,
+      'Confirmed' => StatusTone.info,
+      'PartiallyReceived' || 'ReceivingInProgress' => StatusTone.warning,
+      'DiscrepancyReported' => StatusTone.danger,
+      _ => StatusTone.neutral,
+    };
 
 class _ReceiveForm extends StatefulWidget {
   const _ReceiveForm({required this.order, required this.service, required this.onSaved});

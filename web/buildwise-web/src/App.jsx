@@ -8,11 +8,13 @@ import MaterialRequestsPage from './pages/MaterialRequestsPage'
 import DeliveriesPage from './pages/DeliveriesPage'
 import AgentWorkflowsPage from './pages/AgentWorkflowsPage'
 import AdministrationPage from './pages/AdministrationPage'
+import DashboardPage from './pages/DashboardPage'
 import RfqPage from './pages/RfqPage'
+import SupplierPortalPage from './pages/SupplierPortalPage'
 import LoginPage from './auth/LoginPage'
 import ProtectedRoute from './auth/ProtectedRoute'
 import { useAuth } from './auth/AuthContext'
-import { defaultRouteForRoles, routeForPath } from './auth/accessControl'
+import { NAVIGATION, defaultRouteForRoles, routeForPath } from './auth/accessControl'
 import './pages/common/common.css'
 
 function AuthenticatedLayout() {
@@ -36,9 +38,28 @@ function AuthenticatedLayout() {
   )
 }
 
+/**
+ * Route guard. The allowed roles come from the single NAVIGATION table rather
+ * than a second, hand-maintained list, so a route can never be reachable in the
+ * UI while absent from the menu, or vice versa.
+ */
 function RoleRoute({ allowedRoles, children }) {
   const { roles } = useAuth()
   return <ProtectedRoute roles={roles} allowedRoles={allowedRoles}>{children}</ProtectedRoute>
+}
+
+function renderScreen({ screen, section }) {
+  switch (screen) {
+    case 'Material Requests': return <MaterialRequestsPage />
+    case 'Deliveries': return <DeliveriesPage />
+    case 'Quality Inspections': return <QualityInspectionsPage />
+    case 'Agent Workflows': return <AgentWorkflowsPage />
+    case 'Administration': return <AdministrationPage />
+    case 'RFQs': return <RfqPage />
+    case 'Dashboard': return <DashboardPage />
+    case 'Supplier': return <SupplierPortalPage section={section} />
+    default: return <ProcurementWorkstation section={section} />
+  }
 }
 
 export default function App() {
@@ -52,19 +73,13 @@ export default function App() {
         element={isAuthenticated ? <Navigate to={home} replace /> : <LoginPage />}
       />
       <Route element={isAuthenticated ? <AuthenticatedLayout /> : <Navigate to="/login" replace state={{ from: window.location.pathname }} />}>
-        {NAVIGATION_ROUTES.map(({ path, screen, section, allowedRoles }) => (
+        {NAVIGATION.map((item) => (
           <Route
-            key={path}
-            path={path}
+            key={item.path}
+            path={item.path}
             element={(
-              <RoleRoute allowedRoles={allowedRoles}>
-                {screen === 'Material Requests' ? <MaterialRequestsPage />
-                  : screen === 'Deliveries' ? <DeliveriesPage />
-                  : screen === 'Quality Inspections' ? <QualityInspectionsPage />
-                  : screen === 'Agent Workflows' ? <AgentWorkflowsPage />
-                  : screen === 'Administration' ? <AdministrationPage />
-                  : screen === 'RFQs' ? <RfqPage />
-                  : <ProcurementWorkstation section={section} />}
+              <RoleRoute allowedRoles={item.roles}>
+                {renderScreen(item)}
               </RoleRoute>
             )}
           />
@@ -90,17 +105,3 @@ function ProcurementWorkstation({ section }) {
     />
   )
 }
-
-const NAVIGATION_ROUTES = [
-  { path: '/dashboard', label: 'Dashboard', screen: 'Procurement', section: 'Dashboard', allowedRoles: ['SiteEngineer', 'SiteOfficer', 'ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'QualityInspector', 'Administrator'] },
-  { path: '/material-requests', label: 'Material Requests', screen: 'Material Requests', allowedRoles: ['SiteEngineer', 'SiteOfficer', 'ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'Administrator'] },
-  { path: '/suppliers', label: 'Suppliers', screen: 'Procurement', section: 'Suppliers', allowedRoles: ['ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'Administrator'] },
-  { path: '/quotations', label: 'Quotations', screen: 'Procurement', section: 'Approved Requests', allowedRoles: ['ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'Administrator'] },
-  { path: '/rfqs', label: 'RFQs', screen: 'RFQs', section: 'RFQs', allowedRoles: ['ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'Administrator'] },
-  { path: '/procurement', label: 'Procurement Workspace', screen: 'Procurement', section: 'Dashboard', allowedRoles: ['ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'Administrator'] },
-  { path: '/agent-workflows', label: 'Agent Workflows', screen: 'Agent Workflows', allowedRoles: ['ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'Administrator'] },
-  { path: '/purchase-orders', label: 'Purchase Orders', screen: 'Procurement', section: 'Purchase Orders', allowedRoles: ['ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'SiteEngineer', 'SiteOfficer', 'QualityInspector', 'Administrator'] },
-  { path: '/deliveries', label: 'Deliveries', screen: 'Deliveries', allowedRoles: ['SiteEngineer', 'SiteOfficer', 'ProcurementOfficer', 'ProcurementManager', 'SiteManager', 'QualityInspector', 'Administrator'] },
-  { path: '/quality-inspections', label: 'Quality & NCRs', screen: 'Quality Inspections', allowedRoles: ['SiteEngineer', 'SiteOfficer', 'ProcurementManager', 'SiteManager', 'QualityInspector', 'Administrator'] },
-  { path: '/admin', label: 'User Management', screen: 'Administration', allowedRoles: ['Administrator'] },
-]

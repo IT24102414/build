@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+﻿import { useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Card,
+  Drawer,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -16,15 +16,6 @@ import { useAuth } from '../auth/AuthContext'
 import './common/common.css'
 import './DeliveriesPage.css'
 
-const VIEWS = ['dashboard', 'deliveries', 'list', 'form', 'detail', 'ui-states']
-const VIEW_LABELS = {
-  dashboard: 'Dashboard',
-  deliveries: 'Deliveries',
-  list: 'List',
-  form: 'Form',
-  detail: 'Detail',
-  'ui-states': 'UI States',
-}
 const STATUS_TONE = {
   Scheduled: 'neutral', InTransit: 'info', Arrived: 'info',
   ReceivingInProgress: 'warning', Received: 'success', PartiallyReceived: 'warning',
@@ -41,12 +32,12 @@ const initials = (name) => (name || 'BuildWise').split(' ').map((part) => part[0
 
 export default function DeliveriesPage() {
   const { hasRole, user } = useAuth()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const requestedView = searchParams.get('view')
-  const activeView = VIEWS.includes(requestedView) ? requestedView : 'dashboard'
   const [deliveries, setDeliveries] = useState([])
   const [purchaseOrders, setPurchaseOrders] = useState([])
   const [selectedId, setSelectedId] = useState(null)
+  // Both panels are opt-in. The record form and the detail view are no longer
+  // permanent page sections, so the list stays the primary content.
+  const [isRecordOpen, setIsRecordOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const canReceive = hasRole('SiteEngineer') || hasRole('SiteOfficer')
@@ -63,7 +54,6 @@ export default function DeliveriesPage() {
       const normalizedOrders = Array.isArray(poRows) ? poRows : (poRows.items ?? [])
       setDeliveries(normalizedDeliveries)
       setPurchaseOrders(normalizedOrders)
-      setSelectedId((current) => current ?? normalizedDeliveries[0]?.id ?? null)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -78,89 +68,103 @@ export default function DeliveriesPage() {
     [deliveries, selectedId],
   )
 
-  function selectView(view) {
-    setSearchParams(view === 'dashboard' ? {} : { view }, { replace: true })
-  }
+  // Opening a detail no longer auto-selects a default delivery: with a drawer
+  // there is no "first row" on screen to preselect, so nothing is shown until the
+  // user actually asks for a delivery.
+  function openDetail(id) { setSelectedId(id) }
+  function closeDetail() { setSelectedId(null) }
 
-  function openDetail(id) {
-    setSelectedId(id)
-    selectView('detail')
-  }
-
-  if (loading) return <LoadingState message="Loading delivery workspace…" />
+  if (loading) return <LoadingState message="Loading deliveries…" />
   if (error) return <ErrorState title="Could not load deliveries" message={error} onRetry={loadWorkspace} />
 
   return (
     <div className="delivery-workspace">
-      <nav className="component-tabs" aria-label="Component 3 pages">
-        {VIEWS.map((view) => (
-          <button key={view} type="button" className={activeView === view ? 'is-active' : ''} onClick={() => selectView(view)}>
-            {VIEW_LABELS[view]}
-          </button>
-        ))}
-      </nav>
+      <PageHeader
+        title="Deliveries"
+        description="Monitor receiving, discrepancies and delivery risks."
+        actions={canReceive
+          ? <Button onClick={() => setIsRecordOpen(true)}>+ Record delivery</Button>
+          : <StatusBadge status="neutral">View only</StatusBadge>}
+      />
 
-      {activeView === 'dashboard' && <DeliveryDashboard deliveries={deliveries} orders={purchaseOrders} onOpen={openDetail} onView={selectView} />}
-      {activeView === 'deliveries' && <DeliveriesOverview deliveries={deliveries} orders={purchaseOrders} canReceive={canReceive} onRecord={() => selectView('form')} />}
-      {activeView === 'list' && <DeliveryList deliveries={deliveries} onOpen={openDetail} />}
-      {activeView === 'form' && (
-        canReceive
-          ? <ReceiveDeliveryForm orders={purchaseOrders} userName={user?.fullName} onCancel={() => selectView('deliveries')} onRecorded={(created) => { loadWorkspace(); setSelectedId(created.id); selectView('detail') }} />
-          : <ReadOnlyNotice title="Receiving is restricted" message="Only Site Engineers and Site Officers can record a delivery. Your current role can still view Component 3 information." />
+      <DeliveryStats deliveries={deliveries} orders={purchaseOrders} />
+
+      <WorkflowOverview deliveries={deliveries} orders={purchaseOrders} />
+
+      <DeliveryList deliveries={deliveries} onOpen={openDetail} />
+
+      {isRecordOpen && (
+        <Drawer
+          title="Record a delivery"
+          subtitle="Receive materials against a confirmed purchase order. Every line is validated by the backend."
+          onClose={() => setIsRecordOpen(false)}
+        >
+          <ReceiveDeliveryForm
+            orders={purchaseOrders}
+            userName={user?.fullName}
+            onRecorded={(created) => {
+              // Close the form, refresh the table, and show what was just
+              // recorded so the user sees the persisted result.
+              setIsRecordOpen(false)
+              loadWorkspace()
+              setSelectedId(created.id)
+            }}
+          />
+        </Drawer>
       )}
-      {activeView === 'detail' && <DeliveryDetail delivery={selectedDelivery} onOpen={openDetail} deliveries={deliveries} />}
-      {activeView === 'ui-states' && <DeliveryUiStates onAction={() => selectView('form')} />}
+
+      {selectedDelivery && (
+        <Drawer
+          title={`Delivery #${selectedDelivery.id}`}
+          subtitle={selectedDelivery.deliveryReference}
+          onClose={closeDetail}
+        >
+          <DeliveryDetail delivery={selectedDelivery} />
+        </Drawer>
+      )}
     </div>
   )
 }
 
-// ------------------------------------------------------------------ Dashboard
+// ------------------------------------------------------------------ Summary
+// Compact counters plus a one-line workflow bar. This replaced a full dashboard
+// section that repeated the delivery table (a "Recent activity" list and a
+// "Latest receiving" list) immediately above that table.
 
-function DeliveryDashboard({ deliveries, orders, onOpen, onView }) {
+function DeliveryStats({ deliveries, orders }) {
   const today = new Date().toDateString()
-  const received = deliveries.filter((item) => item.status === 'Received').length
   const attention = deliveries.filter((item) => item.status === 'DiscrepancyReported').length
   const completedToday = deliveries.filter((item) => new Date(item.deliveredAt).toDateString() === today).length
-  const completion = deliveries.length ? Math.round((received / deliveries.length) * 100) : 0
-  const discrepancyRate = deliveries.length ? Math.round((attention / deliveries.length) * 100) : 0
   const completedPoIds = new Set(deliveries.map((item) => item.purchaseOrderId))
   const awaiting = orders.filter((po) => !completedPoIds.has(po.id)).length
-  const recent = deliveries.slice(0, 4)
 
   return (
-    <section className="delivery-page">
-      <PageHeader title="Dashboard" description="A live overview of Component 3 delivery activity." />
-      <div className="metric-grid">
-        <Metric label="Confirmed orders awaiting delivery" value={awaiting} note={`${orders.length} confirmed purchase orders`} tone="orange" />
-        <Metric label="Recorded deliveries" value={deliveries.length} note="Across the current workspace" tone="blue" />
-        <Metric label="Attention required" value={attention} note="Discrepancies need review" tone="red" />
-        <Metric label="Completed today" value={completedToday} note="Persisted receiving records" tone="green" />
-      </div>
-      <div className="dashboard-columns">
-        <Card title="Recent activity" subtitle="Newest delivery entries from PostgreSQL">
-          {recent.length ? <ul className="activity-list">{recent.map((item) => (
-            <li className="activity-item" key={item.id}>
-              <span className="activity-dot" />
-              <button className="activity-link" type="button" onClick={() => onOpen(item.id)}>
-                <strong>Delivery #{item.id} · {item.deliveryReference}</strong>
-                <span className="activity-time">{formatDate(item.deliveredAt, true)}</span>
-              </button>
-            </li>
-          ))}</ul> : <EmptyState title="No recent activity" message="Recorded deliveries will appear here." />}
-        </Card>
-        <Card title="Workflow overview" subtitle="Calculated from current delivery records">
-          <Progress label="Received without discrepancy" value={completion} tone="blue" />
-          <Progress label="Discrepancy rate" value={discrepancyRate} tone={discrepancyRate ? 'orange' : 'green'} />
-          <Progress label="Confirmed orders not yet received" value={orders.length ? Math.round((awaiting / orders.length) * 100) : 0} tone="blue" />
-          <Button variant="secondary" onClick={() => onView('list')}>Review all deliveries</Button>
-        </Card>
-      </div>
-    </section>
+    <div className="metric-grid">
+      <Metric label="Awaiting" value={awaiting} tone="orange" />
+      <Metric label="Records" value={deliveries.length} tone="blue" />
+      <Metric label="Issues" value={attention} tone="red" />
+      <Metric label="Today" value={completedToday} tone="green" />
+    </div>
   )
 }
 
-function Metric({ label, value, note, tone }) {
-  return <Card className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></Card>
+function WorkflowOverview({ deliveries, orders }) {
+  const received = deliveries.filter((item) => item.status === 'Received').length
+  const attention = deliveries.filter((item) => item.status === 'DiscrepancyReported').length
+  const completedPoIds = new Set(deliveries.map((item) => item.purchaseOrderId))
+  const awaiting = orders.filter((po) => !completedPoIds.has(po.id)).length
+
+  return (
+    <Card title="Workflow" subtitle="Calculated from current delivery records">
+      <Progress label="Received" value={deliveries.length ? Math.round((received / deliveries.length) * 100) : 0} tone="blue" />
+      <Progress label="Discrepancy" value={deliveries.length ? Math.round((attention / deliveries.length) * 100) : 0} tone={attention ? 'orange' : 'green'} />
+      <Progress label="Awaiting" value={orders.length ? Math.round((awaiting / orders.length) * 100) : 0} tone="blue" />
+    </Card>
+  )
+}
+
+function Metric({ label, value, tone }) {
+  return <Card className={`metric-card metric-card--${tone}`}><span>{label}</span><strong>{value}</strong></Card>
 }
 
 function Progress({ label, value, tone }) {
@@ -171,39 +175,16 @@ function DeliveryStatus({ status }) {
   return <StatusBadge status={STATUS_TONE[status] ?? 'neutral'}>{titleCase(status)}</StatusBadge>
 }
 
-function itemSummary(delivery) {
-  const count = delivery.items?.length ?? 0
-  return `${count} line ${count === 1 ? 'item' : 'items'}`
-}
 
+// The receiving DTO (DeliveriesController.Project) returns a flat supplierName
+// resolved server-side. It previously read a nested purchaseOrder.supplier.name
+// that the DTO never contained, so every row rendered the "Supplier record not
+// expanded" fallback even though the API was sending the real name.
 function deliverySupplier(delivery) {
-  return delivery.purchaseOrder?.supplier?.name ?? delivery.purchaseOrder?.supplierName ?? 'Supplier record not expanded'
-}
-
-// ------------------------------------------------------------------ Overview
-
-function DeliveriesOverview({ deliveries, orders, canReceive, onRecord }) {
-  return (
-    <section className="delivery-page">
-      <PageHeader
-        title="Deliveries"
-        description="Component 3 — monitor confirmed orders, receiving records, and discrepancies."
-        actions={canReceive ? <Button onClick={onRecord}>+ Record delivery</Button> : <StatusBadge status="neutral">View only</StatusBadge>}
-      />
-      <div className="overview-grid">
-        <Card title="Confirmed purchase orders" subtitle="Eligible to receive on site">
-          {orders.length ? orders.slice(0, 6).map((po) => (
-            <div className="compact-row" key={po.id}><div><strong>PO-{po.id}</strong><small>{po.items?.length ?? 0} line item(s) · due {formatDate(po.expectedDeliveryDate)}</small></div><StatusBadge status="info">Confirmed</StatusBadge></div>
-          )) : <EmptyState title="No confirmed orders" message="Confirmed purchase orders will become available for receiving." />}
-        </Card>
-        <Card title="Latest receiving" subtitle="Most recent records from the shared API">
-          {deliveries.length ? deliveries.slice(0, 6).map((delivery) => (
-            <div className="compact-row" key={delivery.id}><div><strong>{delivery.deliveryReference}</strong><small>PO-{delivery.purchaseOrderId} · {itemSummary(delivery)}</small></div><DeliveryStatus status={delivery.status} /></div>
-          )) : <EmptyState title="Nothing received yet" message="The first recorded delivery will appear here." actionLabel={canReceive ? 'Record first delivery' : undefined} onAction={onRecord} />}
-        </Card>
-      </div>
-    </section>
-  )
+  return delivery.supplierName
+    ?? delivery.purchaseOrder?.supplierName
+    ?? delivery.purchaseOrder?.supplier?.name
+    ?? 'Supplier not recorded'
 }
 
 // ------------------------------------------------------------------ List
@@ -249,7 +230,7 @@ function DeliveryList({ deliveries, onOpen }) {
 
 // ------------------------------------------------------------------ Form
 
-function ReceiveDeliveryForm({ orders, userName, onCancel, onRecorded }) {
+function ReceiveDeliveryForm({ orders, userName, onRecorded }) {
   const [form, setForm] = useState(EMPTY_FORM)
   const [lines, setLines] = useState({})
   const [submitting, setSubmitting] = useState(false)
@@ -277,7 +258,9 @@ function ReceiveDeliveryForm({ orders, userName, onCancel, onRecorded }) {
 
   return (
     <section className="delivery-page">
-      <PageHeader eyebrow={`RECEIVED BY ${initials(userName)}`} title="Record a delivery" description="Receive materials against a confirmed purchase order. Every line is validated by the backend." />
+      {/* The drawer supplies the title; only the recorder attribution is
+          specific to this form. */}
+      {userName && <p className="delivery-recorder">Received by {initials(userName)}</p>}
       {submitError && <ErrorState title="Delivery could not be recorded" message={submitError} />}
       <form onSubmit={handleSubmit} className="delivery-form">
         <Card>
@@ -290,13 +273,18 @@ function ReceiveDeliveryForm({ orders, userName, onCancel, onRecorded }) {
           {!selectedOrder ? <EmptyState title="Select a purchase order" message="Its materials and ordered quantities will appear here." /> : (
             <div className="receiving-lines">{selectedOrder.items.map((item) => (
               <div className="receiving-line" key={item.id ?? item.materialId}>
-                <div><strong>{item.material?.name ?? `Material #${item.materialId}`}</strong><small>Ordered: {formatNumber(item.orderedQuantity)} {item.material?.unit ?? 'units'}</small></div>
-                <TextInput id={`received-${item.materialId}`} label="Received" type="number" min="0" step="0.01" value={lines[item.materialId]?.receivedQuantity ?? ''} onChange={(e) => updateLine(item.materialId, 'receivedQuantity', e.target.value)} />
+                <div><strong>{item.materialName ?? `Material #${item.materialId}`}</strong><small>Ordered: {formatNumber(item.orderedQuantity)} {item.unit ?? 'units'}</small></div>
+                {/* max mirrors the backend rule Received <= Ordered, so an
+                    over-receipt is caught in the browser as well as server-side. */}
+                <TextInput id={`received-${item.materialId}`} label="Received" type="number" min="0" max={item.orderedQuantity} step="0.01" value={lines[item.materialId]?.receivedQuantity ?? ''} onChange={(e) => updateLine(item.materialId, 'receivedQuantity', e.target.value)} />
                 <TextInput id={`damaged-${item.materialId}`} label="Damaged" type="number" min="0" step="0.01" value={lines[item.materialId]?.damagedQuantity ?? ''} onChange={(e) => updateLine(item.materialId, 'damagedQuantity', e.target.value)} />
               </div>
             ))}</div>
           )}
-          <div className="form-actions"><Button variant="secondary" onClick={onCancel} disabled={submitting}>Cancel</Button><Button type="submit" disabled={submitting || !selectedOrder}>{submitting ? 'Recording…' : 'Submit delivery entry'}</Button></div>
+          {/* The form is no longer a separate view, so "Cancel" used to mean
+              "leave this tab". It now clears the in-progress draft, which is
+              what the button still means to someone filling the form in. */}
+          <div className="form-actions"><Button variant="secondary" onClick={() => { setForm(EMPTY_FORM); setLines({}); setSubmitError(null) }} disabled={submitting}>Clear form</Button><Button type="submit" disabled={submitting || !selectedOrder}>{submitting ? 'Recording…' : 'Submit delivery entry'}</Button></div>
         </Card>
       </form>
     </section>
@@ -305,63 +293,137 @@ function ReceiveDeliveryForm({ orders, userName, onCancel, onRecorded }) {
 
 // ------------------------------------------------------------------ Detail
 
-function DeliveryDetail({ delivery, deliveries, onOpen }) {
-  if (!delivery) return <section className="delivery-page"><PageHeader title="Delivery detail" description="Select a persisted delivery to inspect its receiving information." /><Card><EmptyState title="No delivery selected" message="Open a record from the delivery list." /></Card></section>
+function DeliveryDetail({ delivery }) {
+  // COMPONENT 3 agent result. Held here (not in the page shell) so it resets
+  // whenever a different delivery is selected, instead of leaving one
+  // delivery's analysis on screen under another's details.
+  const [analysis, setAnalysis] = useState(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState(null)
+
+  useEffect(() => {
+    setAnalysis(null)
+    setAnalysisError(null)
+  }, [delivery?.id])
+
+  async function runDiscrepancyAnalysis() {
+    setAnalyzing(true)
+    setAnalysisError(null)
+    try {
+      setAnalysis(await qualityApi.analyzeDeliveryDiscrepancy(delivery.id))
+    } catch (err) {
+      setAnalysisError(err.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  // The drawer only mounts this component with a resolved delivery, so the old
+  // "No delivery selected / select a record" panel is unreachable now.
+  if (!delivery) return null
   const received = delivery.items?.reduce((sum, item) => sum + Number(item.receivedQuantity ?? 0), 0) ?? 0
   const damaged = delivery.items?.reduce((sum, item) => sum + Number(item.damagedQuantity ?? 0), 0) ?? 0
+  // Ordered comes from the linked purchase order, resolved server-side, so a
+  // receiver sees the full ordered/received/damaged/shortage picture without
+  // cross-referencing the PO.
+  const ordered = delivery.items?.reduce((sum, item) => sum + Number(item.orderedQuantity ?? 0), 0) ?? 0
+  const shortage = Math.max(0, ordered - received)
+  // Records created before the backend enforced Received <= Ordered can still
+  // hold an impossible quantity. Showing "Shortage: None" next to a
+  // "Discrepancy Reported" status is self-contradictory, so surface the
+  // anomaly explicitly rather than silently showing "None".
+  const overReceipt = received - ordered
+  const hasOverReceipt = overReceipt > 0
   return (
     <section className="delivery-page">
-      <PageHeader
-        eyebrow={`DELIVERY #${delivery.id}`}
-        title={delivery.deliveryReference}
-        description="Reusable detail view for receiving information and activity history."
-        actions={<DeliveryStatus status={delivery.status} />}
-      />
+      {/* The drawer supplies the title and reference; this only adds the status
+          badge, which the drawer header has no room for. */}
+      <div className="detail-status"><DeliveryStatus status={delivery.status} /></div>
       <div className="detail-columns">
         <Card title="Information" subtitle="Persisted receiving and purchase-order details">
           <div className="detail-row"><span>Reference</span><strong>{delivery.deliveryReference}</strong></div>
           <div className="detail-row"><span>Purchase order</span><strong>PO-{delivery.purchaseOrderId}</strong></div>
           <div className="detail-row"><span>Supplier</span><strong>{deliverySupplier(delivery)}</strong></div>
           <div className="detail-row"><span>Received at</span><strong>{formatDate(delivery.deliveredAt, true)}</strong></div>
+          <div className="detail-row"><span>Ordered quantity</span><strong>{formatNumber(ordered)}</strong></div>
           <div className="detail-row"><span>Received quantity</span><strong>{formatNumber(received)}</strong></div>
           <div className="detail-row"><span>Damaged quantity</span><strong>{formatNumber(damaged)}</strong></div>
+          <div className="detail-row"><span>Shortage</span><strong>{shortage > 0 ? formatNumber(shortage) : 'None'}</strong></div>
+          {hasOverReceipt && (
+            <div className="detail-row">
+              <span>Over-receipt</span>
+              <StatusBadge status="danger">
+                {formatNumber(overReceipt)} more than ordered — this record predates quantity validation
+              </StatusBadge>
+            </div>
+          )}
         </Card>
-        <Card title="Activity & history" subtitle="Traceable Component 3 timeline">
+        <Card title="Activity & history" subtitle="Traceable delivery timeline">
           <ul className="activity-list">
             <li className="activity-item"><span className="activity-dot" /><div><strong>Delivery recorded</strong><div className="activity-time">{formatDate(delivery.deliveredAt, true)}</div></div></li>
-            <li className="activity-item"><span className="activity-dot" /><div><strong>Discrepancy analysis completed</strong><div className="activity-time">Delivery workflow persisted by ASP.NET Core</div></div></li>
+            <li className="activity-item"><span className="activity-dot" /><div><strong>Discrepancy analysis {analysis ? 'completed' : 'not yet run in this session'}</strong><div className="activity-time">{analysis ? `${analysis.agent} · ${analysis.tool}` : 'Run the AI Delivery Risk Analysis below to see the agent result'}</div></div></li>
             <li className="activity-item"><span className="activity-dot" /><div><strong>Status set to {titleCase(delivery.status)}</strong><div className="activity-time">Based on ordered, received, and damaged quantities</div></div></li>
           </ul>
           <div className="detail-items">
             <h3>Line items</h3>
-            {delivery.items?.map((item) => <div className="detail-line" key={item.id ?? item.materialId}><div><strong>{item.material?.name ?? `Material #${item.materialId}`}</strong><small>Received {formatNumber(item.receivedQuantity)} · damaged {formatNumber(item.damagedQuantity)}</small></div><StatusBadge status={Number(item.damagedQuantity) > 0 ? 'warning' : 'success'}>{Number(item.damagedQuantity) > 0 ? 'Review' : 'Matched'}</StatusBadge></div>)}
+            {delivery.items?.map((item) => <div className="detail-line" key={item.id ?? item.materialId}><div><strong>{item.materialName ?? `Material #${item.materialId}`}</strong><small>Received {formatNumber(item.receivedQuantity)} · damaged {formatNumber(item.damagedQuantity)}</small></div><StatusBadge status={Number(item.damagedQuantity) > 0 ? 'warning' : 'success'}>{Number(item.damagedQuantity) > 0 ? 'Review' : 'Matched'}</StatusBadge></div>)}
           </div>
         </Card>
       </div>
-      {deliveries.length > 1 && <div className="detail-picker"><span>Open another delivery</span><SelectInput id="detail-delivery" label="" value={delivery.id} onChange={(e) => onOpen(Number(e.target.value))} options={deliveries.map((item) => ({ value: item.id, label: `#${item.id} · ${item.deliveryReference}` }))} /></div>}
+      {/* COMPONENT 3 — AI Delivery Risk Analysis.
+          This is the real DeliveryDiscrepancyAgent (:8003) result, surfaced so
+          the agent contribution is demonstrable rather than asserted in copy.
+          Advisory only: it never changes the recorded delivery status. */}
+      <Card
+        title="AI Delivery Risk Analysis"
+        subtitle="Runs DeliveryDiscrepancyAgent (analyze_discrepancy) over this delivery. Advisory only."
+      >
+        <div className="form-actions">
+          <Button variant="secondary" onClick={runDiscrepancyAnalysis} disabled={analyzing}>
+            {analyzing ? 'Analyzing…' : analysis ? 'Re-run Analysis' : 'Run Delivery Analysis'}
+          </Button>
+        </div>
+
+        {analysisError && (
+          <div style={{ marginTop: '1rem' }}>
+            <ErrorState title="Discrepancy analysis failed" message={analysisError} />
+          </div>
+        )}
+
+        {analysis && (
+          <div style={{ marginTop: '1rem' }}>
+            <div className="detail-row"><span>Agent</span><strong>{analysis.agent}</strong></div>
+            <div className="detail-row"><span>Tool</span><strong>{analysis.tool}</strong></div>
+            <div className="detail-row"><span>Analysis</span><strong>{analysis.summary}</strong></div>
+            <div className="detail-row"><span>Ordered</span><strong>{formatNumber(analysis.orderedQuantity)}</strong></div>
+            <div className="detail-row"><span>Received</span><strong>{formatNumber(analysis.receivedQuantity)}</strong></div>
+            <div className="detail-row">
+              <span>Shortage</span>
+              <strong>{analysis.shortageDetected ? `${formatNumber(analysis.shortageQuantity)} unit(s)` : 'None'}</strong>
+            </div>
+            <div className="detail-row">
+              <span>Damaged</span>
+              <strong>{analysis.damageDetected ? `${formatNumber(analysis.damagedQuantity)} unit(s)` : 'None'}</strong>
+            </div>
+            <div className="detail-row"><span>Risk</span><strong>Delivery quantity/quality discrepancy</strong></div>
+            <div className="detail-row"><span>Recommendation</span><strong>{analysis.recommendation}</strong></div>
+            <div className="detail-row">
+              <span>Agent status</span>
+              <StatusBadge status="success">Completed</StatusBadge>
+            </div>
+            <div className="detail-row">
+              <span>Execution source</span>
+              <StatusBadge status="info">{analysis.executionSource}</StatusBadge>
+            </div>
+            <div className="detail-row">
+              <span>Recorded status</span>
+              <DeliveryStatus status={delivery.status} />
+            </div>
+          </div>
+        )}
+      </Card>
+
     </section>
   )
 }
 
-// ------------------------------------------------------------------ UI states
-
-function DeliveryUiStates({ onAction }) {
-  return (
-    <section className="delivery-page">
-      <PageHeader title="UI states" description="Shared feedback, loading, and status components used across Component 3." />
-      <div className="states-grid">
-        <Card><LoadingState message="Loading delivery information…" /></Card>
-        <Card><EmptyState title="Nothing here yet" message="New delivery records will appear here." actionLabel="Record delivery" onAction={onAction} /></Card>
-        <Card><ErrorState message="The delivery service is temporarily unavailable." onRetry={() => {}} /></Card>
-        <Card title="Status styles" subtitle="Consistent meaning across every delivery view.">
-          <div className="badge-preview"><StatusBadge status="success">Received</StatusBadge><StatusBadge status="warning">Partially received</StatusBadge><StatusBadge status="danger">Discrepancy reported</StatusBadge><StatusBadge status="info">In transit</StatusBadge></div>
-          <div className="button-preview"><Button>Primary action</Button><Button variant="secondary">Secondary</Button><Button variant="danger">Danger</Button></div>
-        </Card>
-      </div>
-    </section>
-  )
-}
-
-function ReadOnlyNotice({ title, message }) {
-  return <section className="delivery-page"><PageHeader title="Component 3" description="Role-aware delivery workspace." /><Card><EmptyState title={title} message={message} /></Card></section>
-}

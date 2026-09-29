@@ -59,3 +59,16 @@ logs/
 # Python
 __pycache__/
 *.pyc
+
+# ==============================
+# Local tooling / agent scratch
+# ==============================
+# Agent worktrees are local scratch copies of the repo, not source. They contain
+# a full duplicate tree and must never be committed or pushed.
+.kilo/
+
+# Stray process output from manually launched runtimes.
+api-out.txt
+api-err.txt
+dev-server.log
+

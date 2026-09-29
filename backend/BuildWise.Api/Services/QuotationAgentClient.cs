@@ -39,7 +39,10 @@ public record AgentAnalyzePayload(
     int material_request_id,
     List<AgentQuotationInput> quotations,
     Dictionary<string, decimal> requested_quantities,
-    DateOnly? required_date = null
+    DateOnly? required_date = null,
+    // Project materials budget, forwarded so the agent can raise a
+    // BUDGET_EXCEEDED risk flag in its recommendation. Null = not set.
+    decimal? budget_amount = null
 );
 
 public class QuotationAgentClient
@@ -58,12 +61,13 @@ public class QuotationAgentClient
         List<AgentQuotationInput> quotations,
         Dictionary<string, decimal> requestedQuantities,
         DateOnly? requiredDate = null,
+        decimal? budgetAmount = null,
         CancellationToken ct = default)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(10));
 
-        var payload = new AgentAnalyzePayload(materialRequestId, quotations, requestedQuantities, requiredDate);
+        var payload = new AgentAnalyzePayload(materialRequestId, quotations, requestedQuantities, requiredDate, budgetAmount);
 
         try
         {
@@ -184,6 +188,23 @@ public class QuotationAgentClient
         }
         if (top.Quotation.promised_delivery_date.HasValue) justification.Add($"Promised delivery date: {top.Quotation.promised_delivery_date:yyyy-MM-dd}.");
         if (!top.CoversAll) riskFlags.Add($"PARTIAL_QUANTITY:{top.Quotation.supplier_name}");
+
+        // Budget risk: raised so the manager sees the overrun in the AI
+        // reasoning, not only in the deterministic validation warnings.
+        // It never blocks the recommendation — a manager may knowingly approve
+        // over budget, which is why this is a flag and not a rejection.
+        if (payload.budget_amount is > 0m)
+        {
+            var landed = top.Quotation.total_amount + top.Quotation.transport_charge;
+            if (landed > payload.budget_amount.Value)
+            {
+                var over = landed - payload.budget_amount.Value;
+                riskFlags.Add($"BUDGET_EXCEEDED:{top.Quotation.supplier_name}");
+                warnings.Add(
+                    $"Budget exceeds planned amount: '{top.Quotation.supplier_name}' lands at {landed:N2}, " +
+                    $"{over:N2} over the project materials budget of {payload.budget_amount.Value:N2}.");
+            }
+        }
 
         return new AgentRecommendationDto(
             RecommendedQuotationId: top.Quotation.quotation_id,

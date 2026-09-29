@@ -53,21 +53,36 @@ class ApiClient {
     };
   }
 
-  Future<http.Response> get(String path) async {
+  /// Shared timeout for ordinary reads and writes.
+  static const Duration _defaultTimeout = Duration(seconds: 10);
+
+  /// [timeout] exists because the AI agent endpoints call a Python service that
+  /// may reach an LLM, which regularly outlives the normal request budget. A
+  /// 10s cap would surface a misleading "Could not analyze…" error on a call
+  /// that is still legitimately running.
+  Future<http.Response> get(String path, {Duration? timeout}) async {
     final headers = await _authHeaders();
     return _client
         .get(Uri.parse('$apiBaseUrl$path'), headers: headers)
-        .timeout(const Duration(seconds: 10));
+        .timeout(timeout ?? _defaultTimeout);
   }
 
-  Future<http.Response> put(String path, {Map<String, dynamic>? body}) async {
+  Future<http.Response> put(
+    String path, {
+    Map<String, dynamic>? body,
+    Duration? timeout,
+  }) async {
     final headers = await _authHeaders(json: true);
     return _client
         .put(Uri.parse('$apiBaseUrl$path'), headers: headers, body: body == null ? null : jsonEncode(body))
-        .timeout(const Duration(seconds: 10));
+        .timeout(timeout ?? _defaultTimeout);
   }
 
-  Future<http.Response> post(String path, {Map<String, dynamic>? body}) async {
+  Future<http.Response> post(
+    String path, {
+    Map<String, dynamic>? body,
+    Duration? timeout,
+  }) async {
     final headers = await _authHeaders(json: true);
     return _client
         .post(
@@ -75,6 +90,6 @@ class ApiClient {
           headers: headers,
           body: body == null ? null : jsonEncode(body),
         )
-        .timeout(const Duration(seconds: 10));
+        .timeout(timeout ?? _defaultTimeout);
   }
 }

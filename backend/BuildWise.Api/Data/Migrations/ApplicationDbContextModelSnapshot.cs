@@ -507,6 +507,9 @@ namespace BuildWise.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<bool?>("DefectsCheck")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("DeliveryId")
                         .HasColumnType("integer");
 
@@ -522,6 +525,9 @@ namespace BuildWise.Api.Data.Migrations
                     b.Property<int>("InspectorUserId")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("MoistureCheck")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -535,6 +541,12 @@ namespace BuildWise.Api.Data.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
+                    b.Property<bool?>("PackagingCheck")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("QuantityCheck")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -544,6 +556,9 @@ namespace BuildWise.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool?>("VisualConditionCheck")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 
@@ -1033,6 +1048,10 @@ namespace BuildWise.Api.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<decimal?>("MaterialBudgetAmount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1391,6 +1410,11 @@ namespace BuildWise.Api.Data.Migrations
                         {
                             Id = 9,
                             Name = "SiteManager"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Name = "Supplier"
                         });
                 });
 
@@ -1472,6 +1496,9 @@ namespace BuildWise.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1479,6 +1506,8 @@ namespace BuildWise.Api.Data.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("SupplierId");
 
                     b.ToTable("users", (string)null);
                 });
@@ -1934,6 +1963,16 @@ namespace BuildWise.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Rfq");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("BuildWise.Api.Models.Entities.User", b =>
+                {
+                    b.HasOne("BuildWise.Api.Models.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Supplier");
                 });

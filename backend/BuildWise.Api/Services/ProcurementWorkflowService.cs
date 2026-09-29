@@ -17,6 +17,7 @@ public class ProcurementWorkflowService
     private readonly ProcurementValidationService _validationService;
     private readonly ProcurementPlanningAgentService _planningAgent;
     private readonly IEmailService _emailService;
+    private readonly NotificationService? _notificationService;
     private readonly ILogger<ProcurementWorkflowService> _logger;
 
     public ProcurementWorkflowService(
@@ -25,13 +26,15 @@ public class ProcurementWorkflowService
         ProcurementValidationService validationService,
         ProcurementPlanningAgentService planningAgent,
         IEmailService emailService,
-        ILogger<ProcurementWorkflowService> logger)
+        ILogger<ProcurementWorkflowService> logger,
+        NotificationService? notificationService = null)
     {
         _db = db;
         _agentClient = agentClient;
         _validationService = validationService;
         _planningAgent = planningAgent;
         _emailService = emailService;
+        _notificationService = notificationService;
         _logger = logger;
     }
 
@@ -43,6 +46,8 @@ public class ProcurementWorkflowService
         var request = await _db.MaterialRequests
             .Include(r => r.Items)
             .ThenInclude(i => i.Material)
+            // The project is needed for the materials-budget risk flag.
+            .Include(r => r.Project)
             .FirstOrDefaultAsync(r => r.Id == materialRequestId);
 
         if (request is null)
@@ -134,8 +139,12 @@ public class ProcurementWorkflowService
 
         try
         {
-            // Call Agent Microservice
-            var recommendation = await _agentClient.AnalyzeAsync(materialRequestId, agentQuotations, requestedQuantities, request.RequiredDate);
+            // Call Agent Microservice. The project's materials budget is forwarded
+            // so the agent can raise a BUDGET_EXCEEDED risk flag alongside its
+            // price/delivery/history/quality reasoning.
+            var projectBudget = request.Project?.MaterialBudgetAmount;
+            var recommendation = await _agentClient.AnalyzeAsync(materialRequestId, agentQuotations,
+                requestedQuantities, request.RequiredDate, projectBudget);
 
             // Validate schema conformance (§5.7)
             var schemaResult = _validationService.ValidateRecommendationSchema(recommendation);
@@ -633,7 +642,11 @@ public class ProcurementWorkflowService
             if (request is null) return;
 
             var requester = await _db.Users.FindAsync(request.RequestedByUserId);
-            if (requester is null || string.IsNullOrWhiteSpace(requester.Email)) return;
+            if (requester is null) return;
+            if (_notificationService is not null)
+                await _notificationService.CreateProcurementEventAsync(requester.Id, materialRequestId, po.Id, po.SupplierId);
+
+            if (string.IsNullOrWhiteSpace(requester.Email)) return;
 
             var subject = $"[BuildWise] Purchase Order #{po.Id} created for your material request";
             var body =

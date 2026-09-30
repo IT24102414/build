@@ -65,7 +65,8 @@ export const NAVIGATION = [
   { path: '/agent-workflows', label: 'Agent Workflows', screen: 'Agent Workflows', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator] },
   { path: '/purchase-orders', label: 'Purchase Orders', screen: 'Procurement', section: 'Purchase Orders', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.ReceivingOfficer, ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.QualityInspector, ROLES.Administrator] },
   { path: '/deliveries', label: 'Deliveries', screen: 'Deliveries', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
-  { path: '/quality-inspections', label: 'Quality & NCRs', screen: 'Quality Inspections', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
+  { path: '/quality-inspections', label: 'Quality Inspections', screen: 'Quality Inspections', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
+  { path: '/non-conformances', label: 'Non-Conformance Reports', screen: 'Non-Conformances', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
   { path: '/admin', label: 'User Management', screen: 'Administration', roles: [ROLES.Administrator] },
 
   // Supplier portal. An external role, mutually exclusive with the internal

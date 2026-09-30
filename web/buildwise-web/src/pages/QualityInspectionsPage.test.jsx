@@ -2,8 +2,10 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import QualityInspectionsPage from './QualityInspectionsPage'
+import NonConformancesPage from './NonConformancesPage'
 import { qualityApi } from '../services/qualityApi'
 import { useAuth } from '../auth/AuthContext'
+import { procurementApi } from '../Features/procurement/services/procurementApi'
 
 vi.mock('../services/qualityApi', () => ({
   qualityApi: {
@@ -12,7 +14,14 @@ vi.mock('../services/qualityApi', () => ({
     getInspection: vi.fn(),
     analyzeQualityRisk: vi.fn(),
     transitionNonConformance: vi.fn(),
+    listMaterialRequests: vi.fn(),
+    listDeliveries: vi.fn(),
   },
+}))
+
+// The lifecycle flow reads counts from the procurement side too.
+vi.mock('../Features/procurement/services/procurementApi', () => ({
+  procurementApi: { listRfqs: vi.fn(), listPurchaseOrders: vi.fn() },
 }))
 
 vi.mock('../auth/AuthContext', () => ({ useAuth: vi.fn() }))
@@ -107,7 +116,14 @@ describe('QualityInspectionsPage', () => {
     vi.clearAllMocks()
     qualityApi.listNonConformances.mockResolvedValue([])
     qualityApi.listInspections.mockResolvedValue(inspections)
-    useAuth.mockReturnValue({ hasRole: () => true })
+    // The lifecycle flow reads counts from several endpoints; settle them so an
+    // unstubbed call cannot reject and leave a stage showing "—".
+    qualityApi.listMaterialRequests.mockResolvedValue([])
+    qualityApi.listDeliveries.mockResolvedValue([])
+    procurementApi.listRfqs.mockResolvedValue([])
+    procurementApi.listPurchaseOrders.mockResolvedValue({ total: 0 })
+    // `roles` is read by the lifecycle flow to decide which stages are visible.
+    useAuth.mockReturnValue({ hasRole: () => true, roles: ['QualityInspector'] })
   })
 
   it('lists inspections and offers an AI analysis action for each', async () => {
@@ -185,7 +201,8 @@ describe('QualityInspectionsPage', () => {
     await screen.findByTestId('quality-risk-panel')
     // Exactly one panel, for the row that was analysed.
     expect(screen.getAllByTestId('quality-risk-panel')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: 'Run AI Analysis' })).toBeInTheDocument()
+    // Both rows keep their own action, so the analysed row was not replaced.
+    expect(screen.getAllByRole('button', { name: 'Run AI Analysis' })).toHaveLength(2)
   })
 
   it('states that the agent is advisory while the inspection record is authoritative', async () => {
@@ -244,7 +261,8 @@ describe('QualityInspectionsPage', () => {
   it('opens the full non-conformance record from the NCR number', async () => {
     const user = userEvent.setup()
     qualityApi.listNonConformances.mockResolvedValue([ncr])
-    render(<QualityInspectionsPage />)
+    // The NCR record moved to its own screen when the page was split.
+    render(<NonConformancesPage />)
 
     // The table alone only shows a summary; the evidence chain is behind a click.
     await user.click(await screen.findByRole('button', { name: 'NCR-781611' }))
@@ -261,5 +279,104 @@ describe('QualityInspectionsPage', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'NCR-781611' })).not.toBeInTheDocument())
+  })
+
+  it('shows the material lifecycle chain on the inspections screen', async () => {
+    render(<QualityInspectionsPage />)
+    await screen.findByText('INS-34')
+
+    // The point of the split: the chain states that an inspection comes from a
+    // delivery and feeds non-conformances.
+    const flow = await screen.findByTestId('lifecycle-flow')
+    for (const stage of ['request', 'approval', 'rfq', 'quotation', 'po', 'delivery', 'inspection', 'ncr', 'resolution']) {
+      expect(within(flow).getByTestId(`lifecycle-stage-${stage}`)).toBeInTheDocument()
+    }
+    // The active stage is the page you are on.
+    expect(screen.getByTestId('lifecycle-stage-inspection')).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('shows a dash for a lifecycle stage the caller cannot read', async () => {
+    // A Quality Inspector cannot read RFQs (ProcurementStaffAndAdmin only), so
+    // that stage must not claim a count of zero.
+    render(<QualityInspectionsPage />)
+    await screen.findByText('INS-34')
+
+    const rfqStage = await screen.findByTestId('lifecycle-stage-rfq')
+    expect(within(rfqStage).getByText('—')).toBeInTheDocument()
+  })
+})
+
+describe('NonConformancesPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    qualityApi.listNonConformances.mockResolvedValue([ncr])
+    qualityApi.listInspections.mockResolvedValue([])
+    qualityApi.listMaterialRequests.mockResolvedValue([])
+    qualityApi.listDeliveries.mockResolvedValue([])
+    procurementApi.listRfqs.mockResolvedValue([])
+    procurementApi.listPurchaseOrders.mockResolvedValue({ total: 0 })
+    useAuth.mockReturnValue({ hasRole: () => true, roles: ['ProcurementManager'] })
+  })
+
+  it('lists non-conformances and highlights the NCR lifecycle stage', async () => {
+    render(<NonConformancesPage />)
+
+    expect(await screen.findByText('NCR-781611')).toBeInTheDocument()
+    // The active stage is the page you are on.
+    expect(screen.getByTestId('lifecycle-stage-ncr')).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('does not show the inspections list on the non-conformance screen', async () => {
+    render(<NonConformancesPage />)
+    await screen.findByText('NCR-781611')
+
+    // The two screens are genuinely separate now.
+    expect(screen.queryByText('INS-34')).not.toBeInTheDocument()
+  })
+
+  it('refuses a resolution-bearing transition with no resolution text', async () => {
+    const user = userEvent.setup()
+    render(<NonConformancesPage />)
+    await screen.findByText('NCR-781611')
+
+    // Pre-select the Resolved status, leave the resolution blank, save.
+    await user.selectOptions(
+      screen.getByLabelText('Transition status for NCR-781611'),
+      'Resolved',
+    )
+    await user.click(screen.getByRole('button', { name: 'Save transition' }))
+
+    // Guarded client-side, so no pointless round trip is made.
+    expect(await screen.findByText(/resolution is required/i)).toBeInTheDocument()
+    expect(qualityApi.transitionNonConformance).not.toHaveBeenCalled()
+  })
+
+  it('submits the transition with the resolution when one is provided', async () => {
+    const user = userEvent.setup()
+    qualityApi.transitionNonConformance.mockResolvedValue({ id: ncr.id, status: 'Resolved' })
+    render(<NonConformancesPage />)
+    await screen.findByText('NCR-781611')
+
+    await user.selectOptions(
+      screen.getByLabelText('Transition status for NCR-781611'),
+      'Resolved',
+    )
+    await user.type(screen.getByLabelText('Resolution'), 'Supplier replaced 20 bags.')
+    await user.click(screen.getByRole('button', { name: 'Save transition' }))
+
+    await waitFor(() => expect(qualityApi.transitionNonConformance).toHaveBeenCalledWith(ncr.id, expect.objectContaining({
+      status: 'Resolved',
+      resolution: 'Supplier replaced 20 bags.',
+    })))
+  })
+
+  it('hides the review controls from a role that cannot approve', async () => {
+    useAuth.mockReturnValue({ hasRole: () => false, roles: ['QualityInspector'] })
+    render(<NonConformancesPage />)
+    await screen.findByText('NCR-781611')
+
+    // A Quality Inspector records inspections; they do not close NCRs.
+    expect(screen.queryByRole('button', { name: 'Save transition' })).not.toBeInTheDocument()
+    expect(screen.getByText('Awaiting Procurement Manager review')).toBeInTheDocument()
   })
 })

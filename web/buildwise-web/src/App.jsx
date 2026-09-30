@@ -4,6 +4,7 @@ import AppLayout from './layouts/AppLayout'
 import ProcurementApp from './Features/procurement/pages/ProcurementApp'
 import ComingSoon from './pages/common/ComingSoon'
 import QualityInspectionsPage from './pages/QualityInspectionsPage'
+import NonConformancesPage from './pages/NonConformancesPage'
 import MaterialRequestsPage from './pages/MaterialRequestsPage'
 import DeliveriesPage from './pages/DeliveriesPage'
 import AgentWorkflowsPage from './pages/AgentWorkflowsPage'
@@ -53,6 +54,7 @@ function renderScreen({ screen, section }) {
     case 'Material Requests': return <MaterialRequestsPage />
     case 'Deliveries': return <DeliveriesPage />
     case 'Quality Inspections': return <QualityInspectionsPage />
+    case 'Non-Conformances': return <NonConformancesPage />
     case 'Agent Workflows': return <AgentWorkflowsPage />
     case 'Administration': return <AdministrationPage />
     case 'RFQs': return <RfqPage />

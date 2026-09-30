@@ -1,15 +1,42 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-/// Base URL for BuildWise.Api. Defaults to the Android emulator's alias for
-/// the host machine's localhost; override per platform/device with
-/// `--dart-define=API_BASE_URL=...` (see docs/component2_setup_guide.md).
-const String apiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:5078/api',
-);
+/// Compile-time override, set with `--dart-define=API_BASE_URL=...`.
+///
+/// This is still the right tool for a physical phone or a remote server, where
+/// the host cannot be inferred. It is no longer required for normal local use:
+/// when it is absent the URL is derived from the platform (see
+/// [defaultApiBaseUrl]).
+const String _apiBaseUrlOverride = String.fromEnvironment('API_BASE_URL');
+
+/// Resolves the API origin for the current platform.
+///
+/// Previously this was hard-coded to `10.0.2.2`, which is only meaningful on
+/// the Android emulator. Launched in a browser that address does not resolve, so
+/// every request failed with an opaque "Failed to fetch" and login was
+/// impossible. Deriving the origin keeps the app working out of the box on web
+/// and desktop while preserving the emulator behaviour on Android.
+String defaultApiBaseUrl() {
+  if (kIsWeb) {
+    // The app is served from the same machine as the API in local development,
+    // so reuse the browser's host and only swap the port.
+    final host = Uri.base.host.isEmpty ? 'localhost' : Uri.base.host;
+    final scheme = Uri.base.scheme.isEmpty ? 'http' : Uri.base.scheme;
+    return '$scheme://$host:5078/api';
+  }
+  // Android emulator: 10.0.2.2 is the host machine's loopback.
+  return 'http://10.0.2.2:5078/api';
+}
+
+/// Base URL for BuildWise.Api.
+///
+/// Override per device with `--dart-define=API_BASE_URL=...`; otherwise it is
+/// derived from the platform (see docs/component2_setup_guide.md).
+String get apiBaseUrl =>
+    _apiBaseUrlOverride.isNotEmpty ? _apiBaseUrlOverride : defaultApiBaseUrl();
 
 /// Thin shared HTTP client: attaches the signed-in user's JWT (from secure
 /// storage) to every request and centralizes the auth-session shape so every

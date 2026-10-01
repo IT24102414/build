@@ -50,7 +50,9 @@ foreach ($comp in $components) {
     }
 
     # Delete local branch if exists
-    git branch -D $comp.Branch 2>$null
+    try {
+        & git branch -D $comp.Branch 2>$null | Out-Null
+    } catch {}
 
     # Create temporary detached worktree
     git worktree add --detach $tempWorktree

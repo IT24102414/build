@@ -41,11 +41,9 @@ foreach ($comp in $components) {
     Write-Host "`n--> Processing branch: $($comp.Branch)" -ForegroundColor Yellow
     $srcPath = Join-Path $root $comp.Folder
     
-    # Switch to orphan branch
-    git checkout --orphan $($comp.Branch) 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        git checkout -B $($comp.Branch)
-    }
+    # Delete existing local branch if present, then create orphan
+    git branch -D $($comp.Branch) 2>$null
+    git checkout --orphan $($comp.Branch)
     
     # Remove all tracked and untracked files from git index & working tree (except .git, submissions, submission_packages, scripts)
     Get-ChildItem -Path $root -Exclude ".git", "submissions", "submission_packages", "scripts", "node_modules", ".venv" | Remove-Item -Recurse -Force

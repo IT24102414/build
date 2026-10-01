@@ -3,10 +3,15 @@ import { Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, Paginat
 import { procurementApi } from '../services/procurementApi'
 import { statusTone } from '../components/statusTone'
 import SupplierFormModal from '../components/SupplierFormModal'
+import { useAuth } from '../../../auth/AuthContext'
+import { hasAnyRole, ROLES } from '../../../auth/accessControl'
 
 const PAGE_SIZE = 10
 
 export default function SupplierList({ onOpenSupplier }) {
+  const { roles } = useAuth()
+  const canManageSuppliers = hasAnyRole(roles, [ROLES.ProcurementOfficer, ROLES.Administrator])
+
   const [suppliers, setSuppliers] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -54,7 +59,11 @@ export default function SupplierList({ onOpenSupplier }) {
 
   return (
     <div className="stack">
-      <PageHeader title="Suppliers" description="Manage the supplier directory used across quotations and procurement." actions={<Button onClick={() => setModalOpen(true)}>+ Add supplier</Button>} />
+      <PageHeader
+        title="Suppliers"
+        description="Manage the supplier directory used across quotations and procurement."
+        actions={canManageSuppliers ? <Button onClick={() => setModalOpen(true)}>+ Add supplier</Button> : null}
+      />
       <div className="toolbar">
         <form className="toolbar__filters" onSubmit={handleSearchSubmit}>
           <SearchInput placeholder="Search by name, contact, or email…" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -63,7 +72,12 @@ export default function SupplierList({ onOpenSupplier }) {
       </div>
       <Card>
         {loading ? <LoadingState message="Loading suppliers…" /> : error ? <ErrorState message={error} onRetry={() => load()} /> : suppliers.length === 0 ? (
-          <EmptyState title="No suppliers yet" message="Add your first supplier to start recording quotations." actionLabel="+ Add supplier" onAction={() => setModalOpen(true)} />
+          <EmptyState
+            title="No suppliers yet"
+            message="No active suppliers registered in the system."
+            actionLabel={canManageSuppliers ? '+ Add supplier' : undefined}
+            onAction={canManageSuppliers ? () => setModalOpen(true) : undefined}
+          />
         ) : (
           <>
             <div className="table-wrap">

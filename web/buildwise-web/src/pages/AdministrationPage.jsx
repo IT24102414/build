@@ -108,7 +108,6 @@ export default function AdministrationPage() {
         eyebrow="BuildWise"
         title="Administration"
         description="Protected user, role, audit, and system-health workspace."
-        actions={<Button onClick={() => { setIsAddUserOpen(true); setFormError('') }}>+ Add New User</Button>}
       />
 
       {message && (

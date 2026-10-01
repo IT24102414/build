@@ -19,7 +19,6 @@ export default function PurchaseOrderDetail({ orderId, onBack }) {
   const canManageStatus = hasAnyRole(roles, [
     ROLES.ProcurementManager,
     ROLES.ProcurementOfficer,
-    ROLES.SiteManager,
     ROLES.Administrator,
   ])
 

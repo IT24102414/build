@@ -84,7 +84,7 @@ export default function QualityInspectionsPage() {
     ['Inspections', inspections.length, 'Completed quality records', '#2563eb'],
     ['Not fully accepted', notFullyAccepted, 'Partial or rejected result', '#b45309'],
     ['Units inspected', totalInspected, 'Across all recorded lines', '#0f766e'],
-    ['Units rejected', totalRejected, 'Each raises an NCR', '#b91c1c'],
+    ['Units rejected', totalRejected, 'Rejected inspection lines automatically raise NCRs', '#b91c1c'],
   ]
   return (
     <div className="stack">

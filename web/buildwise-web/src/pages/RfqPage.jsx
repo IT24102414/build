@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, TextInput, SelectInput } from '../components/shared'
+import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, TextInput, SelectInput } from '../components/shared'
 import { procurementApi } from '../Features/procurement/services/procurementApi'
 import { statusTone } from '../Features/procurement/components/statusTone'
 import './common/common.css'
@@ -268,7 +268,7 @@ export default function RfqPage() {
                   <th>Response Date</th>
                   <th>Suppliers</th>
                   <th>Status</th>
-                  <th />
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -291,7 +291,7 @@ export default function RfqPage() {
                           fontSize: '0.8rem',
                         }}
                       >
-                        {rfq.suppliers.length} invited
+                        {(rfq.suppliers || []).length} invited
                       </span>
                     </td>
                     <td>
@@ -308,62 +308,90 @@ export default function RfqPage() {
         )}
       </Card>
 
-      {/* ── Detail panel ── */}
-      {selected && (
-        <Card title={`RFQ #${selected.id}`} subtitle={selected.projectName}>
+      {/* ── Detail Drawer ── */}
+      <Drawer
+        open={selected != null}
+        title={selected ? `RFQ #${selected.id}` : ''}
+        subtitle={selected ? `Linked to Material Request #${selected.materialRequestId} · ${selected.projectName}` : ''}
+        onClose={() => setSelected(null)}
+      >
+        {selected && (
           <div className="stack">
-            <div className="detail-columns">
+            <div className="actions">
+              <StatusBadge status={statusTone(selected.status)}>{selected.status}</StatusBadge>
+            </div>
+
+            <Card title="RFQ Information">
               <div className="detail-row">
-                <span className="detail-row__label">Status</span>
-                <span className="detail-row__value">
-                  <StatusBadge status={statusTone(selected.status)}>{selected.status}</StatusBadge>
-                </span>
+                <span className="detail-row__label">Project</span>
+                <span className="detail-row__value">{selected.projectName}</span>
               </div>
               <div className="detail-row">
-                <span className="detail-row__label">Response date</span>
+                <span className="detail-row__label">Material Request</span>
+                <span className="detail-row__value">Request #{selected.materialRequestId}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-row__label">Required response date</span>
                 <span className="detail-row__value">{selected.requiredResponseDate}</span>
               </div>
-            </div>
-            <div className="detail-row">
-              <span className="detail-row__label">Invited suppliers</span>
-              <span className="detail-row__value">
-                {selected.suppliers.length === 0
-                  ? 'None'
-                  : selected.suppliers.map((s) => (
-                    <span
-                      key={s.supplierId}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem',
-                        marginRight: '0.5rem',
-                        marginBottom: '0.25rem',
-                        background: s.invitationStatus === 'Accepted' ? 'var(--color-success-100)' : 'var(--color-surface-muted)',
-                        color: s.invitationStatus === 'Accepted' ? 'var(--color-success-700)' : 'var(--color-text-muted)',
-                        borderRadius: '999px',
-                        padding: '0.2rem 0.7rem',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {s.supplierName} · {s.invitationStatus}
-                    </span>
-                  ))}
-              </span>
-            </div>
-            <div className="form-actions">
-              <Button variant="secondary" onClick={() => setSelected(null)}>← Back</Button>
-              <Button
-                variant="danger"
-                onClick={() => closeRfq(selected.id)}
-                disabled={selected.status !== 'Issued'}
-              >
-                Close RFQ
-              </Button>
-            </div>
+              <div className="detail-row">
+                <span className="detail-row__label">Created at</span>
+                <span className="detail-row__value">{selected.createdAt ? new Date(selected.createdAt).toLocaleDateString() : '—'}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-row__label">Notes</span>
+                <span className="detail-row__value">{selected.notes || '—'}</span>
+              </div>
+            </Card>
+
+            <Card title="Invited Suppliers" subtitle={`${(selected.suppliers || []).length} suppliers invited to submit quotations`}>
+              {(!selected.suppliers || selected.suppliers.length === 0) ? (
+                <EmptyState title="No suppliers invited" message="No suppliers recorded for this RFQ." />
+              ) : (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Supplier</th>
+                        <th>Supplier Status</th>
+                        <th>Invitation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selected.suppliers.map((s) => (
+                        <tr key={s.id || s.supplierId}>
+                          <td><strong>{s.supplierName}</strong></td>
+                          <td>
+                            <StatusBadge status={statusTone(s.supplierStatus || 'Active')}>
+                              {s.supplierStatus || 'Active'}
+                            </StatusBadge>
+                          </td>
+                          <td>
+                            <StatusBadge status={s.invitationStatus === 'Accepted' || s.status === 'Accepted' ? 'success' : 'neutral'}>
+                              {s.invitationStatus || s.status || 'Invited'}
+                            </StatusBadge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+
+            {selected.status === 'Issued' && (
+              <div className="form-actions">
+                <Button
+                  variant="danger"
+                  onClick={() => closeRfq(selected.id)}
+                >
+                  Close RFQ Window
+                </Button>
+              </div>
+            )}
           </div>
-        </Card>
-      )}
+        )}
+      </Drawer>
     </div>
   )
 }

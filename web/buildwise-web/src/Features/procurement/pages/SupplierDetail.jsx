@@ -3,8 +3,13 @@ import { Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, SelectI
 import { procurementApi } from '../services/procurementApi'
 import { statusTone } from '../components/statusTone'
 import SupplierFormModal from '../components/SupplierFormModal'
+import { useAuth } from '../../../auth/AuthContext'
+import { hasAnyRole, ROLES } from '../../../auth/accessControl'
 
 export default function SupplierDetail({ supplierId, onBack }) {
+  const { roles } = useAuth()
+  const canManageSupplier = hasAnyRole(roles, [ROLES.ProcurementOfficer, ROLES.Administrator])
+
   const [supplier, setSupplier] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -56,14 +61,32 @@ export default function SupplierDetail({ supplierId, onBack }) {
   if (error) return <ErrorState message={error} onRetry={load} />
   if (!supplier) return null
 
-  const actions = <><Button variant="secondary" onClick={onBack}>Back to list</Button><Button onClick={() => setEditOpen(true)}>Edit details</Button></>
+  const actions = (
+    <>
+      <Button variant="secondary" onClick={onBack}>Back to list</Button>
+      {canManageSupplier && <Button onClick={() => setEditOpen(true)}>Edit details</Button>}
+    </>
+  )
 
   return (
     <div className="stack">
       <PageHeader eyebrow={`SUPPLIER #${supplier.id}`} title={supplier.name} description="Supplier profile and quotation history." actions={actions} />
       <div className="actions">
         <StatusBadge status={statusTone(supplier.status)}>{supplier.status}</StatusBadge>
-        <SelectInput label="" aria-label="Change supplier status" value={supplier.status} onChange={handleStatusChange} disabled={statusSaving} options={[{ value: 'Active', label: 'Set Active' }, { value: 'Inactive', label: 'Set Inactive' }, { value: 'Suspended', label: 'Set Suspended' }]} />
+        {canManageSupplier && (
+          <SelectInput
+            label=""
+            aria-label="Change supplier status"
+            value={supplier.status}
+            onChange={handleStatusChange}
+            disabled={statusSaving}
+            options={[
+              { value: 'Active', label: 'Set Active' },
+              { value: 'Inactive', label: 'Set Inactive' },
+              { value: 'Suspended', label: 'Set Suspended' },
+            ]}
+          />
+        )}
       </div>
       <div className="grid grid--2">
         <Card title="Information">

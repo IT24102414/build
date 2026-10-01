@@ -48,7 +48,7 @@ export default function Drawer({ open, title, subtitle, onClose, children, foote
             type="button"
             className="app-drawer__close-btn"
             onClick={onClose}
-            aria-label="Close panel"
+            aria-label="Close"
             title="Close"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

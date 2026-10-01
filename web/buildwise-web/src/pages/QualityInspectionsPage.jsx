@@ -3,6 +3,7 @@ import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader,
 import { qualityApi } from '../services/qualityApi'
 import QualityRiskPanel from '../Features/quality/components/QualityRiskPanel'
 import QualityChecklist from '../Features/quality/components/QualityChecklist'
+import QualityLifecycleFlow from '../Features/quality/components/QualityLifecycleFlow'
 
 import './common/common.css'
 
@@ -92,6 +93,8 @@ export default function QualityInspectionsPage() {
         description="Material accepted, partially accepted or rejected on site. Rejected lines automatically raise a non-conformance."
       />
 
+      <QualityLifecycleFlow activeKey="inspection" />
+
 
       <div className="grid grid--4">
         {summaryCards.map(([label, value, note, color]) => (
@@ -152,7 +155,7 @@ export default function QualityInspectionsPage() {
                           onClick={() => runRiskAnalysis(inspection.id)}
                           disabled={analyzingId === inspection.id}
                         >
-                          {analyzingId === inspection.id ? 'Analysing…' : analysisById[inspection.id] ? 'View AI Risk' : 'Run AI Analysis'}
+                          {analyzingId === inspection.id ? 'Analysing…' : 'Run AI Analysis'}
                         </Button>
                       </td>
                     </tr>

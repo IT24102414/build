@@ -39,8 +39,8 @@ export default function MaterialRequestsPage() {
   // Roles that may record Approve / Reject / Request Revision — mirrors the
   // backend MaterialRequestApprovalOnly policy.
   const canApprove = hasRole('ProcurementManager') || hasRole('SiteManager') || hasRole('Administrator')
-  const canCreate = hasRole('SiteEngineer') || hasRole('Administrator')
-  const isSiteUser = hasRole('SiteEngineer')
+  const canCreate = hasRole('SiteEngineer') || hasRole('SiteOfficer') || hasRole('Administrator')
+  const isSiteUser = hasRole('SiteEngineer') || hasRole('SiteOfficer')
   // Procurement staff who may read the whole queue but cannot decide: the
   // Procurement Officer moves an Approved request through RFQ / quotation, so
   // the Approved rows are precisely the ones they need to see. They were
@@ -119,7 +119,7 @@ export default function MaterialRequestsPage() {
 
   if (mode === 'list') {
     // Client-side filtering on the already-loaded list
-    const filteredRequests = requests.filter((r) => {
+    const filteredRequests = (requests || []).filter((r) => {
       const q = searchQuery.trim().toLowerCase()
       const matchesSearch = !q ||
         String(r.id).includes(q) ||
@@ -145,6 +145,7 @@ export default function MaterialRequestsPage() {
             )}
             <button
               className="bw-button bw-button--secondary"
+              aria-label="Refresh"
               disabled={loading}
               onClick={() => loadRequests({ background: true })}
             >
@@ -198,11 +199,11 @@ export default function MaterialRequestsPage() {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="all">All statuses</option>
-              <option value="PendingApproval">Pending Approval</option>
-              <option value="Approved">Approved</option>
-              <option value="Rejected">Rejected</option>
-              <option value="RevisionRequested">Revision Requested</option>
-              <option value="Fulfilled">Fulfilled</option>
+              <option value="PendingApproval">Status: Pending Approval</option>
+              <option value="Approved">Status: Approved</option>
+              <option value="Rejected">Status: Rejected</option>
+              <option value="RevisionRequested">Status: Revision Requested</option>
+              <option value="Fulfilled">Status: Fulfilled</option>
             </select>
           </div>
 
@@ -215,10 +216,10 @@ export default function MaterialRequestsPage() {
               onChange={(e) => setPriorityFilter(e.target.value)}
             >
               <option value="all">All priorities</option>
-              <option value="Urgent">Urgent</option>
-              <option value="High">High</option>
-              <option value="Normal">Normal</option>
-              <option value="Low">Low</option>
+              <option value="Urgent">Urgent priority</option>
+              <option value="High">High priority</option>
+              <option value="Normal">Normal priority</option>
+              <option value="Low">Low priority</option>
             </select>
           </div>
         </div>
@@ -251,9 +252,9 @@ export default function MaterialRequestsPage() {
           >
             {filteredRequests.length === 0 ? (
               <EmptyState
-                title={requests.length === 0 ? 'No material requests' : 'No matches'}
+                title={(requests || []).length === 0 ? 'No material requests' : 'No matches'}
                 message={
-                  requests.length === 0
+                  (requests || []).length === 0
                     ? canApprove ? 'Requests awaiting your approval will appear here.' : 'Submitted requests will appear here.'
                     : 'Try adjusting your search or filters.'
                 }

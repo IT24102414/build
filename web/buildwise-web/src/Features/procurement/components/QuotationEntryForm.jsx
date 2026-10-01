@@ -242,7 +242,7 @@ export default function QuotationEntryForm({ requestDetail, onCreated }) {
                 onChange={updateLine(item.id, 'quantity')}
               />
               <TextInput
-                label="Unit price (LKR)"
+                label="Unit price"
                 name={`unitPrice-${item.id}`}
                 type="number"
                 min="0"
@@ -260,7 +260,8 @@ export default function QuotationEntryForm({ requestDetail, onCreated }) {
                     fontSize: '1.05rem',
                   }}
                 >
-                  LKR {(Number(lines[item.id]?.quantity || 0) * Number(lines[item.id]?.unitPrice || 0)).toLocaleString()}
+                  <span className="muted" style={{ fontSize: '0.85rem', marginRight: '0.25rem' }}>LKR</span>
+                  <span>{(Number(lines[item.id]?.quantity || 0) * Number(lines[item.id]?.unitPrice || 0)).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -281,14 +282,17 @@ export default function QuotationEntryForm({ requestDetail, onCreated }) {
           }}
         >
           <span>Quotation Total</span>
-          <span style={{ fontSize: '1.2rem' }}>LKR {total.toLocaleString()}</span>
+          <span style={{ fontSize: '1.2rem' }}>
+            <span style={{ fontSize: '0.9rem', opacity: 0.85, marginRight: '0.25rem' }}>LKR</span>
+            <span>{total.toLocaleString()}</span>
+          </span>
         </div>
 
-        {error && <span className="field__error" style={{ fontSize: '0.9rem' }}>⚠ {error}</span>}
+        {error && <span className="field__error" style={{ fontSize: '0.9rem' }}>{error}</span>}
 
         <div className="form-actions">
           <Button type="submit" disabled={submitting || hasDateError}>
-            {submitting ? 'Saving…' : 'Save Quotation'}
+            {submitting ? 'Saving…' : 'Save quotation'}
           </Button>
         </div>
       </form>

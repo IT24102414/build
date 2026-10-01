@@ -2,6 +2,13 @@ public record UpdateUserActiveRequestDto(bool IsActive);
 
 public record UpdateUserRolesRequestDto(List<string> Roles);
 
+public record CreateUserRequestDto(
+    string FullName,
+    string Email,
+    string Password,
+    string Role
+);
+
 public record AdminUserDto(
     int Id,
     string FullName,

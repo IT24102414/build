@@ -15,10 +15,12 @@ async function request(path, { method = 'GET', body } = {}) {
 
 export const administrationApi = {
   listUsers: (search) => request(`/admin/users${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  createUser: (payload) => request('/admin/users', { method: 'POST', body: payload }),
   setUserActive: (id, isActive) => request(`/admin/users/${id}/active`, { method: 'PATCH', body: { isActive } }),
   setUserRoles: (id, roles) => request(`/admin/users/${id}/roles`, { method: 'PUT', body: { roles } }),
   auditLogs: () => request('/admin/audit-logs?pageSize=25'),
   health: () => request('/admin/health'),
 }
+
 
 export default administrationApi

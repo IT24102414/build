@@ -1,9 +1,11 @@
 using BuildWise.Api.Data;
 using BuildWise.Api.DTOs;
 using BuildWise.Api.Models.Entities;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using BuildWise.Api.Security;
+using BuildWise.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace BuildWise.Api.Controllers;
@@ -16,11 +18,22 @@ public class AdministrationController : ControllerBase
     private readonly ApplicationDbContext _db;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IEmailService _emailService;
     private readonly ILogger<AdministrationController> _logger;
+    private readonly PasswordHasher<User> _passwordHasher = new();
 
-    public AdministrationController(ApplicationDbContext db, IConfiguration configuration, IHttpClientFactory httpClientFactory, ILogger<AdministrationController> logger)
+    public AdministrationController(
+        ApplicationDbContext db,
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        IEmailService emailService,
+        ILogger<AdministrationController> logger)
     {
-        _db = db; _configuration = configuration; _httpClientFactory = httpClientFactory; _logger = logger;
+        _db = db;
+        _configuration = configuration;
+        _httpClientFactory = httpClientFactory;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     [HttpGet("users")]
@@ -31,6 +44,73 @@ public class AdministrationController : ControllerBase
         var users = await query.OrderBy(u => u.FullName).ToListAsync();
         return Ok(users.Select(MapUser));
     }
+
+    [HttpPost("users")]
+    public async Task<ActionResult<AdminUserDto>> CreateUser([FromBody] CreateUserRequestDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.FullName) || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password))
+            return BadRequest(new { message = "Full name, email, and password are required." });
+
+        if (dto.Password.Length < 6)
+            return BadRequest(new { message = "Password must be at least 6 characters long." });
+
+        var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
+        var exists = await _db.Users.AnyAsync(u => u.Email == normalizedEmail);
+        if (exists)
+            return Conflict(new { message = $"An account with email '{normalizedEmail}' already exists." });
+
+        var roleName = string.IsNullOrWhiteSpace(dto.Role) ? Roles.SiteEngineer : dto.Role.Trim();
+        var role = await _db.Roles.FirstOrDefaultAsync(r => r.Name == roleName);
+        if (role is null)
+            return BadRequest(new { message = $"Unknown role '{roleName}'." });
+
+        var user = new User
+        {
+            FullName = dto.FullName.Trim(),
+            Email = normalizedEmail,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        user.PasswordHash = _passwordHasher.HashPassword(user, dto.Password);
+        user.UserRoles.Add(new UserRole { User = user, Role = role });
+
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
+
+        // Send welcome email to the newly created user
+        try
+        {
+            var subject = "Welcome to BuildWise — Your Account Has Been Created";
+            var body = $"""
+                Hello {user.FullName},
+
+                Your BuildWise account has been created by an Administrator.
+
+                Account Credentials:
+                - Full Name: {user.FullName}
+                - Email: {user.Email}
+                - Assigned Role: {role.Name}
+                - Temporary Password: {dto.Password}
+
+                You can now sign in at the BuildWise Portal or via the BuildWise Mobile App:
+                Web Portal: http://127.0.0.1:5174/login
+
+                Please remember to change your password after initial login.
+
+                Best regards,
+                BuildWise Administration Team
+                """;
+            await _emailService.SendAsync(user.Email, subject, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send welcome email to {Email}", user.Email);
+        }
+
+        return Ok(MapUser(user));
+    }
+
 
     [HttpPatch("users/{id:int}/active")]
     public async Task<IActionResult> SetActive(int id, [FromBody] UpdateUserActiveRequestDto request)

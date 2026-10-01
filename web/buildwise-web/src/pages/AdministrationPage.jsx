@@ -33,7 +33,7 @@ export default function AdministrationPage() {
   if (loading) return <LoadingState message="Loading administration workspace…" />
   if (error) return <ErrorState message={error} onRetry={load} />
   return <div className="stack">
-    <PageHeader eyebrow="BuildSupply LK" title="Administration" description="Protected user, role, audit, and system-health workspace." />
+    <PageHeader eyebrow="BuildWise" title="Administration" description="Protected user, role, audit, and system-health workspace." />
     {message && <Card><strong>{message}</strong></Card>}
     <div className="form-grid">
       <Card title="System health" subtitle="Database and internal agent reachability">

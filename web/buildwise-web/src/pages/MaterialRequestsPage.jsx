@@ -50,6 +50,11 @@ export default function MaterialRequestsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshedAt, setRefreshedAt] = useState(null)
+  // Search + filter (client-side on already-loaded list)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [priorityFilter, setPriorityFilter] = useState('all')
+
 
   /**
    * Loads the queue. A `background` refresh (poll, focus, or returning from the
@@ -111,6 +116,18 @@ export default function MaterialRequestsPage() {
   }, [loadRequests])
 
   if (mode === 'list') {
+    // Client-side filtering on the already-loaded list
+    const filteredRequests = requests.filter((r) => {
+      const q = searchQuery.trim().toLowerCase()
+      const matchesSearch = !q ||
+        String(r.id).includes(q) ||
+        (r.projectName || '').toLowerCase().includes(q) ||
+        (r.reason || '').toLowerCase().includes(q)
+      const matchesStatus = statusFilter === 'all' || r.status === statusFilter
+      const matchesPriority = priorityFilter === 'all' || r.priority === priorityFilter
+      return matchesSearch && matchesStatus && matchesPriority
+    })
+
     return (
       <div className="stack">
         <div className="toolbar">
@@ -124,106 +141,205 @@ export default function MaterialRequestsPage() {
                 Updated {refreshedAt.toLocaleTimeString()}
               </span>
             )}
-            <Button
-              variant="secondary"
+            <button
+              className="bw-button bw-button--secondary"
               disabled={loading}
-              // Manual escape hatch alongside the auto-refresh, for a manager who
-              // wants the newest request now instead of at the next tick.
               onClick={() => loadRequests({ background: true })}
             >
-              Refresh
-            </Button>
+              ↻ Refresh
+            </button>
             {isSiteUser ? (
-              <Button onClick={() => setMode('create')}>
+              <button className="bw-button bw-button--primary" onClick={() => setMode('create')}>
                 + Create Request
-              </Button>
+              </button>
             ) : null}
           </div>
         </div>
 
+        {/* ── Search + filter bar ── */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto auto',
+            gap: '0.75rem',
+            alignItems: 'end',
+            background: 'var(--color-surface-muted)',
+            borderRadius: 'var(--radius-md)',
+            padding: '0.85rem 1rem',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          {/* Search */}
+          <div className="field">
+            <label className="field__label">Search</label>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }}>
+                🔍
+              </span>
+              <input
+                className="field__control"
+                type="search"
+                placeholder="Search by ID, project name, or reason…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ paddingLeft: '2.2rem' }}
+              />
+            </div>
+          </div>
+
+          {/* Status filter */}
+          <div className="field">
+            <label className="field__label">Status</label>
+            <select
+              className="field__control"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="PendingApproval">Pending Approval</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+              <option value="RevisionRequested">Revision Requested</option>
+              <option value="Fulfilled">Fulfilled</option>
+            </select>
+          </div>
+
+          {/* Priority filter */}
+          <div className="field">
+            <label className="field__label">Priority</label>
+            <select
+              className="field__control"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+            >
+              <option value="all">All priorities</option>
+              <option value="Urgent">Urgent</option>
+              <option value="High">High</option>
+              <option value="Normal">Normal</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+        </div>
+
+        {/* result count */}
+        {(searchQuery || statusFilter !== 'all' || priorityFilter !== 'all') && (
+          <p style={{ fontSize: 'var(--font-sm)', color: 'var(--color-text-muted)', margin: 0 }}>
+            Showing {filteredRequests.length} of {requests.length} requests
+            {' '}
+            <button
+              style={{ color: 'var(--color-primary-700)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontSize: 'inherit' }}
+              onClick={() => { setSearchQuery(''); setStatusFilter('all'); setPriorityFilter('all') }}
+            >
+              Clear filters
+            </button>
+          </p>
+        )}
+
         {loading && <LoadingState />}
         {error && <ErrorState message={error} onRetry={loadRequests} />}
         {!loading && !error && (
-          <Card>
-            {requests.length === 0 ? (
+          <div
+            style={{
+              background: 'var(--color-white)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--color-border)',
+              boxShadow: '0 1px 2px rgb(19 26 43 / 0.04)',
+              overflow: 'hidden',
+            }}
+          >
+            {filteredRequests.length === 0 ? (
               <EmptyState
-                title="No material requests"
-                message={canApprove ? 'Requests awaiting your approval will appear here.' : 'Submitted requests will appear here.'}
+                title={requests.length === 0 ? 'No material requests' : 'No matches'}
+                message={
+                  requests.length === 0
+                    ? canApprove ? 'Requests awaiting your approval will appear here.' : 'Submitted requests will appear here.'
+                    : 'Try adjusting your search or filters.'
+                }
               />
             ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Project</th>
-                    <th>Required Date</th>
-                    <th>Priority</th>
-                    <th>Items</th>
-                    <th>Status</th>
-                    {(canApprove || isSiteUser || isProcurementReader) && <th>Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {requests.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.id}</td>
-                      <td>{r.projectName || `Project #${r.projectId}`}</td>
-                      <td>{r.requiredDate}</td>
-                      <td>{r.priority}</td>
-                      <td>{r.itemCount}</td>
-                      <td>
-                        <StatusBadge status={materialRequestTone(r.status)}>
-                          {r.status}
-                        </StatusBadge>
-                      </td>
-                      {(isSiteUser || isProcurementReader) && (
-                        <td>
-                          {/* Site roles now see the whole site queue (read-only),
-                              so they need a way to open a colleague's request and
-                              watch its status change after a manager decides.
-                              No analysis or decision controls here — those stay
-                              with approvers. */}
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setSelected(r)
-                              setMode('review')
-                            }}
-                          >
-                            View
-                          </Button>
-                        </td>
-                      )}
-                      {canApprove && (
-                        <td>
-                          {/* An approver must be able to open *any* request in
-                              their queue, not only an undecided one: MR-52 and
-                              friends are already Approved, so gating the row on
-                              isMaterialRequestDecidable left no way to reach the
-                              request at all — and therefore no way to run the
-                              Step 3 analysis on it. The label still reflects
-                              what opening the row will let them do. */}
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setSelected(r)
-                              setMode('review')
-                            }}
-                          >
-                            {isMaterialRequestDecidable(r.status) ? 'Review' : 'View & Analyze'}
-                          </Button>
-                        </td>
-                      )}
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Project</th>
+                      <th>Required Date</th>
+                      <th>Priority</th>
+                      <th>Items</th>
+                      <th>Status</th>
+                      {(canApprove || isSiteUser || isProcurementReader) && <th>Actions</th>}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredRequests.map((r) => (
+                      <tr key={r.id}>
+                        <td style={{ fontWeight: 700, color: 'var(--color-primary-700)' }}>{r.id}</td>
+                        <td style={{ fontWeight: 600 }}>{r.projectName || `Project #${r.projectId}`}</td>
+                        <td>{r.requiredDate}</td>
+                        <td>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              borderRadius: '999px',
+                              padding: '0.2rem 0.65rem',
+                              fontWeight: 700,
+                              fontSize: '0.78rem',
+                              background: r.priority === 'Urgent' ? 'var(--color-danger-100)'
+                                : r.priority === 'High' ? 'var(--color-warning-100)'
+                                : r.priority === 'Normal' ? 'var(--color-info-100)' : '#eef2f6',
+                              color: r.priority === 'Urgent' ? 'var(--color-danger-700)'
+                                : r.priority === 'High' ? 'var(--color-warning-700)'
+                                : r.priority === 'Normal' ? 'var(--color-info-700)' : 'var(--color-text-muted)',
+                            }}
+                          >
+                            {r.priority}
+                          </span>
+                        </td>
+                        <td>{r.itemCount}</td>
+                        <td>
+                          <StatusBadge status={materialRequestTone(r.status)}>
+                            {r.status}
+                          </StatusBadge>
+                        </td>
+                        {(isSiteUser || isProcurementReader) && (
+                          <td>
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setSelected(r)
+                                setMode('review')
+                              }}
+                            >
+                              View
+                            </Button>
+                          </td>
+                        )}
+                        {canApprove && (
+                          <td>
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setSelected(r)
+                                setMode('review')
+                              }}
+                            >
+                              {isMaterialRequestDecidable(r.status) ? 'Review' : 'View & Analyze'}
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </Card>
+          </div>
         )}
       </div>
     )
   }
+
 
   if (mode === 'review' && selected) {
     return (

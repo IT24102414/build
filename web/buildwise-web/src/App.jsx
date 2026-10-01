@@ -94,16 +94,16 @@ export default function App() {
 }
 
 function ProcurementWorkstation({ section }) {
-  const [nav, setNav] = useState({ section, supplierId: null, requestId: null, orderId: null })
+  const [nav, setNav] = useState({ section: section ?? 'Dashboard', supplierId: null, requestId: null, orderId: null })
   const patchNav = (patch) => setNav((current) => ({ ...current, ...patch }))
 
   return (
     <ProcurementApp
-      section={section ?? nav.section}
+      section={nav.section}
       supplierId={nav.supplierId}
       requestId={nav.requestId}
       orderId={nav.orderId}
       onNavigate={patchNav}
     />
   )
-}
+}

@@ -3,7 +3,7 @@ import { Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusB
 import { qualityApi } from '../services/qualityApi'
 import QualityRiskPanel from '../Features/quality/components/QualityRiskPanel'
 import QualityChecklist from '../Features/quality/components/QualityChecklist'
-import QualityLifecycleFlow from '../Features/quality/components/QualityLifecycleFlow'
+
 import './common/common.css'
 
 /**
@@ -86,7 +86,6 @@ export default function QualityInspectionsPage() {
         description="Material accepted, partially accepted or rejected on site. Rejected lines automatically raise a non-conformance."
       />
 
-      <QualityLifecycleFlow activeKey="inspection" counts={{ inspection: inspections.length }} />
 
       <div className="grid grid--4">
         {summaryCards.map(([label, value, note, color]) => (

@@ -47,12 +47,12 @@ export default function LoginPage() {
         <div className="auth-brand">
           <div className="auth-brand__mark">BW</div>
           <div>
-            <div className="auth-brand__name">BuildSupply LK</div>
-            <div className="auth-brand__tagline">Construction materials procurement, delivery & quality</div>
+            <div className="auth-brand__name">BuildWise</div>
+            <div className="auth-brand__tagline">Construction Procurement &amp; Quality Management</div>
           </div>
         </div>
 
-        <Card title="Sign in" subtitle="Use your BuildSupply LK account to continue.">
+        <Card title="Sign in" subtitle="Use your BuildWise account to continue.">
           <form className="stack" onSubmit={handleSubmit}>
             <TextInput label="Email" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             <TextInput label="Password" name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />

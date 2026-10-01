@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Card,
@@ -93,35 +93,31 @@ export default function DeliveriesPage() {
 
       <DeliveryList deliveries={deliveries} onOpen={openDetail} />
 
-      {isRecordOpen && (
-        <Drawer
-          title="Record a delivery"
-          subtitle="Receive materials against a confirmed purchase order. Every line is validated by the backend."
-          onClose={() => setIsRecordOpen(false)}
-        >
-          <ReceiveDeliveryForm
-            orders={purchaseOrders}
-            userName={user?.fullName}
-            onRecorded={(created) => {
-              // Close the form, refresh the table, and show what was just
-              // recorded so the user sees the persisted result.
-              setIsRecordOpen(false)
-              loadWorkspace()
-              setSelectedId(created.id)
-            }}
-          />
-        </Drawer>
-      )}
+      <Drawer
+        open={isRecordOpen}
+        title="Record a delivery"
+        subtitle="Receive materials against a confirmed purchase order. Every line is validated by the backend."
+        onClose={() => setIsRecordOpen(false)}
+      >
+        <ReceiveDeliveryForm
+          orders={purchaseOrders}
+          userName={user?.fullName}
+          onRecorded={(created) => {
+            setIsRecordOpen(false)
+            loadWorkspace()
+            setSelectedId(created.id)
+          }}
+        />
+      </Drawer>
 
-      {selectedDelivery && (
-        <Drawer
-          title={`Delivery #${selectedDelivery.id}`}
-          subtitle={selectedDelivery.deliveryReference}
-          onClose={closeDetail}
-        >
-          <DeliveryDetail delivery={selectedDelivery} />
-        </Drawer>
-      )}
+      <Drawer
+        open={selectedDelivery != null}
+        title={selectedDelivery ? `Delivery #${selectedDelivery.id}` : ''}
+        subtitle={selectedDelivery?.deliveryReference ?? ''}
+        onClose={closeDetail}
+      >
+        {selectedDelivery && <DeliveryDetail delivery={selectedDelivery} />}
+      </Drawer>
     </div>
   )
 }

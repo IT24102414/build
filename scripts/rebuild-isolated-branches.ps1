@@ -37,37 +37,57 @@ $components = @(
     }
 )
 
+$tempWorktree = Join-Path ([System.IO.Path]::GetTempPath()) "bw_worktree_staging"
+
 foreach ($comp in $components) {
     Write-Host "`n--> Processing branch: $($comp.Branch)" -ForegroundColor Yellow
     $srcPath = Join-Path $root $comp.Folder
-    
-    # Delete existing local branch if present, then create orphan
-    git branch -D $($comp.Branch) 2>$null
-    git checkout --orphan $($comp.Branch)
-    
-    # Remove all tracked and untracked files from git index & working tree (except .git, submissions, submission_packages, scripts)
-    Get-ChildItem -Path $root -Exclude ".git", "submissions", "submission_packages", "scripts", "node_modules", ".venv" | Remove-Item -Recurse -Force
-    git rm -rf . 2>$null | Out-Null
-    
-    # Copy only this component's files into root
-    Get-ChildItem -Path $srcPath | ForEach-Object {
-        Copy-Item -Path $_.FullName -Destination $root -Recurse -Force
+
+    # Clean previous temp worktree if exists
+    if (Test-Path $tempWorktree) {
+        git worktree remove $tempWorktree --force 2>$null
+        Remove-Item $tempWorktree -Recurse -Force -ErrorAction SilentlyContinue
     }
+
+    # Delete local branch if exists
+    git branch -D $comp.Branch 2>$null
+
+    # Create temporary detached worktree
+    git worktree add --detach $tempWorktree
     
-    # Stage files and commit
-    git add .
-    $env:GIT_AUTHOR_NAME = $comp.AuthorName
-    $env:GIT_AUTHOR_EMAIL = $comp.AuthorEmail
-    $env:GIT_COMMITTER_NAME = $comp.AuthorName
-    $env:GIT_COMMITTER_EMAIL = $comp.AuthorEmail
+    # In tempWorktree, remove everything except .git
+    Get-ChildItem -Path $tempWorktree -Force | Where-Object { $_.Name -ne ".git" } | Remove-Item -Recurse -Force
     
-    git commit -m $comp.Message --author "$($comp.AuthorName) <$($comp.AuthorEmail)>"
-    
-    # Push to final remote
-    Write-Host "Pushing $($comp.Branch) to remote 'final'..." -ForegroundColor Cyan
-    git push final $($comp.Branch) --force
+    # Copy only this component's files
+    Get-ChildItem -Path $srcPath | ForEach-Object {
+        Copy-Item -Path $_.FullName -Destination $tempWorktree -Recurse -Force
+    }
+
+    # Also ensure .github/workflows/ci.yml is included
+    $ciDir = Join-Path $tempWorktree ".github\workflows"
+    if (-not (Test-Path $ciDir)) { New-Item $ciDir -ItemType Directory -Force | Out-Null }
+    Copy-Item (Join-Path $root ".github\workflows\ci.yml") (Join-Path $ciDir "ci.yml") -Force
+
+    # Commit inside tempWorktree as an orphan branch
+    Push-Location $tempWorktree
+    try {
+        git checkout --orphan $comp.Branch
+        git add .
+        $env:GIT_AUTHOR_NAME = $comp.AuthorName
+        $env:GIT_AUTHOR_EMAIL = $comp.AuthorEmail
+        $env:GIT_COMMITTER_NAME = $comp.AuthorName
+        $env:GIT_COMMITTER_EMAIL = $comp.AuthorEmail
+        git commit -m $comp.Message --author "$($comp.AuthorName) <$($comp.AuthorEmail)>"
+        
+        Write-Host "Pushing $($comp.Branch) to remote 'final'..." -ForegroundColor Cyan
+        git push final $comp.Branch --force
+    }
+    finally {
+        Pop-Location
+    }
+
+    git worktree remove $tempWorktree --force 2>$null
+    if (Test-Path $tempWorktree) { Remove-Item $tempWorktree -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-# Switch back to main
-git checkout main
 Write-Host "`n=== Successfully Rebuilt and Pushed all 4 Isolated Feature Branches! ===" -ForegroundColor Green

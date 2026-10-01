@@ -40,7 +40,7 @@ export default function DeliveriesPage() {
   const [isRecordOpen, setIsRecordOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const canReceive = hasRole('SiteEngineer') || hasRole('SiteOfficer')
+  const canReceive = hasRole('SiteOfficer') || hasRole('ReceivingOfficer') || hasRole('Administrator')
 
   async function loadWorkspace() {
     setLoading(true)

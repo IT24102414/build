@@ -57,16 +57,16 @@ export const canSeeCommercialTerms = (roles = []) => hasAnyRole(roles, COMMERCIA
  */
 export const NAVIGATION = [
   { path: '/dashboard', label: 'Dashboard', screen: 'Dashboard', section: 'Dashboard', roles: INTERNAL_STAFF },
-  { path: '/material-requests', label: 'Material Requests', screen: 'Material Requests', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator] },
-  { path: '/suppliers', label: 'Suppliers', screen: 'Procurement', section: 'Suppliers', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator] },
-  { path: '/quotations', label: 'Quotations', screen: 'Procurement', section: 'Approved Requests', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator] },
-  { path: '/rfqs', label: 'RFQs', screen: 'RFQs', section: 'RFQs', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator] },
-  { path: '/procurement', label: 'Procurement Workspace', screen: 'Procurement', section: 'Dashboard', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator] },
-  { path: '/agent-workflows', label: 'Agent Workflows', screen: 'Agent Workflows', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator] },
+  { path: '/material-requests', label: 'Material Requests', screen: 'Material Requests', roles: [ROLES.SiteEngineer, ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
+  { path: '/suppliers', label: 'Suppliers', screen: 'Procurement', section: 'Suppliers', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.Administrator] },
+  { path: '/quotations', label: 'Quotations', screen: 'Procurement', section: 'Approved Requests', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.Administrator] },
+  { path: '/rfqs', label: 'RFQs', screen: 'RFQs', section: 'RFQs', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.Administrator] },
+  { path: '/procurement', label: 'Procurement Workspace', screen: 'Procurement', section: 'Dashboard', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.Administrator] },
+  { path: '/agent-workflows', label: 'Agent Workflows', screen: 'Agent Workflows', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.SiteManager, ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.QualityInspector, ROLES.Administrator] },
   { path: '/purchase-orders', label: 'Purchase Orders', screen: 'Procurement', section: 'Purchase Orders', roles: [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.ReceivingOfficer, ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.QualityInspector, ROLES.Administrator] },
   { path: '/deliveries', label: 'Deliveries', screen: 'Deliveries', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
-  { path: '/quality-inspections', label: 'Quality Inspections', screen: 'Quality Inspections', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
-  { path: '/non-conformances', label: 'Non-Conformance Reports', screen: 'Non-Conformances', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
+  { path: '/quality-inspections', label: 'Quality Inspections', screen: 'Quality Inspections', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
+  { path: '/non-conformances', label: 'Non-Conformance Reports', screen: 'Non-Conformances', roles: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ReceivingOfficer, ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.QualityInspector, ROLES.Administrator] },
   { path: '/admin', label: 'User Management', screen: 'Administration', roles: [ROLES.Administrator] },
 
   // Supplier portal. An external role, mutually exclusive with the internal

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../components/shared'
+import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../components/shared'
 import { qualityApi } from '../services/qualityApi'
 import QualityRiskPanel from '../Features/quality/components/QualityRiskPanel'
 import QualityChecklist from '../Features/quality/components/QualityChecklist'
@@ -21,6 +21,7 @@ export default function QualityInspectionsPage() {
   // COMPONENT 4 agent results, keyed by inspection id. Kept per inspection so
   // one analysis is never shown against a different inspection's row.
   const [analysisById, setAnalysisById] = useState({})
+  const [activeAnalysis, setActiveAnalysis] = useState(null)
   const [analyzingId, setAnalyzingId] = useState(null)
   const [analysisError, setAnalysisError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -33,6 +34,10 @@ export default function QualityInspectionsPage() {
    * created by the backend and the inspector.
    */
   async function runRiskAnalysis(inspectionId) {
+    if (analysisById[inspectionId]) {
+      setActiveAnalysis(analysisById[inspectionId])
+      return
+    }
     setAnalyzingId(inspectionId)
     setAnalysisError(null)
     try {
@@ -44,6 +49,7 @@ export default function QualityInspectionsPage() {
         return
       }
       setAnalysisById((current) => ({ ...current, [inspectionId]: result }))
+      setActiveAnalysis(result)
     } catch (err) {
       setAnalysisError(err.message)
     } finally {
@@ -146,7 +152,7 @@ export default function QualityInspectionsPage() {
                           onClick={() => runRiskAnalysis(inspection.id)}
                           disabled={analyzingId === inspection.id}
                         >
-                          {analyzingId === inspection.id ? 'Analysing…' : 'Run AI Analysis'}
+                          {analyzingId === inspection.id ? 'Analysing…' : analysisById[inspection.id] ? 'View AI Risk' : 'Run AI Analysis'}
                         </Button>
                       </td>
                     </tr>
@@ -158,11 +164,14 @@ export default function QualityInspectionsPage() {
         )}
       </Card>
 
-      {Object.entries(analysisById).map(([id, analysis]) => (
-        <Card key={id} title={`AI quality risk — INS-${id}`}>
-          <QualityRiskPanel analysis={analysis} />
-        </Card>
-      ))}
+      <Drawer
+        open={activeAnalysis != null}
+        title={`AI Quality Risk — INS-${activeAnalysis?.inspectionId}`}
+        subtitle="QualityRiskAnalysisAgent advisory risk assessment"
+        onClose={() => setActiveAnalysis(null)}
+      >
+        {activeAnalysis && <QualityRiskPanel analysis={activeAnalysis} />}
+      </Drawer>
     </div>
   )
 }

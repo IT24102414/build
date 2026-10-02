@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Card, StatusBadge, TextInput } from '../../../components/shared'
 import { statusTone } from './statusTone'
 
-export default function ProcurementApprovalPanel({ workflow, role, onDecide, deciding }) {
+export default function ProcurementApprovalPanel({ workflow, role, onDecide, deciding, onViewPurchaseOrder }) {
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
 
@@ -31,7 +31,17 @@ export default function ProcurementApprovalPanel({ workflow, role, onDecide, dec
       {!isManager ? (
         <p className="status-note">Sign in as Procurement Manager to Approve, Reject, or Request Revision on this workflow. Officers can view status only.</p>
       ) : alreadyDecided ? (
-        <p className="status-note">This workflow has already been decided: <strong>{workflow.approvalStatus}</strong>.</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <p className="status-note" style={{ margin: 0 }}>
+            This workflow has already been decided: <strong>{workflow.approvalStatus}</strong>.
+            {workflow.purchaseOrderId ? ` Purchase Order #${workflow.purchaseOrderId} has been created.` : ''}
+          </p>
+          {workflow.purchaseOrderId && onViewPurchaseOrder && (
+            <Button variant="secondary" onClick={() => onViewPurchaseOrder(workflow.purchaseOrderId)}>
+              View Purchase Order #{workflow.purchaseOrderId} →
+            </Button>
+          )}
+        </div>
       ) : workflow.status !== 'AwaitingApproval' ? (
         <p className="status-note">This workflow is not yet awaiting approval (current status: {workflow.status}).</p>
       ) : (

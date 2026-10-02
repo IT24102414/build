@@ -92,18 +92,17 @@ export default function RequestWorkspace({ requestId, role, onBack, onViewPurcha
       const refreshed = await procurementApi.getWorkflow(workflow.id)
       setWorkflow(refreshed)
       if (decision === 'Approve') {
-        setCreatingPo(true)
-        const po = await procurementApi.createPurchaseOrderFromWorkflow(workflow.id)
-        setNotice(`Purchase Order #${po.id} created for ${po.supplierName}.`)
+        const poId = refreshed.purchaseOrderId
+        setNotice(poId ? `Purchase Order #${poId} created successfully.` : 'Decision recorded: Approved.')
         await loadCore()
-        setCreatingPo(false)
-        onViewPurchaseOrder?.(po.id)
+        if (poId) {
+          onViewPurchaseOrder?.(poId)
+        }
       } else {
         setNotice(`Decision recorded: ${decision}.`)
       }
     } catch (err) {
       setError(err.message)
-      setCreatingPo(false)
     } finally {
       setDeciding(false)
     }
@@ -154,12 +153,12 @@ export default function RequestWorkspace({ requestId, role, onBack, onViewPurcha
           <Card>
             <div className="actions">
               <Button onClick={handleRunAnalysis} disabled={runningAnalysis}>{runningAnalysis ? 'Running AI analysis…' : workflow ? 'Re-run AI Analysis' : 'Run AI Analysis'}</Button>
-              {creatingPo && <span className="muted">Creating purchase order…</span>}
+              {deciding && <span className="muted">Recording decision…</span>}
             </div>
           </Card>
           {workflow && <WorkflowPipeline workflow={workflow} budget={budget} />}
           <AIRecommendationReview workflow={workflow} />
-          {workflow && <ProcurementApprovalPanel workflow={workflow} role={role} onDecide={handleDecision} deciding={deciding || creatingPo} />}
+          {workflow && <ProcurementApprovalPanel workflow={workflow} role={role} onDecide={handleDecision} deciding={deciding} onViewPurchaseOrder={onViewPurchaseOrder} />}
         </div>
       )}
     </div>

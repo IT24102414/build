@@ -120,7 +120,22 @@ export default function RequestWorkspace({ requestId, role, onBack, onViewPurcha
       <div className="actions"><StatusBadge status={materialRequestTone(requestDetail.status)}>{requestDetail.status}</StatusBadge><span className="muted">Required by {requestDetail.requiredDate}</span></div>
 
       {notice && <div className="proc-mock-banner" style={{ background: 'var(--color-success-100)', color: 'var(--color-success-700)', borderColor: 'var(--color-success-700)' }}>{notice}</div>}
-      {error && requestDetail && <div className="proc-mock-banner" style={{ background: 'var(--color-danger-100)', color: 'var(--color-danger-700)', borderColor: 'var(--color-danger-700)' }}>{error}</div>}
+      {error && requestDetail && (
+        <div className="proc-mock-banner" style={{ background: 'var(--color-danger-100)', color: 'var(--color-danger-700)', borderColor: 'var(--color-danger-700)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <span>{error}</span>
+          {(() => {
+            const match = error.match(/Purchase Order #(\d+)/i)
+            if (match && onViewPurchaseOrder) {
+              return (
+                <Button variant="secondary" onClick={() => onViewPurchaseOrder(Number(match[1]))} style={{ fontSize: '0.8rem', padding: '0.25rem 0.6rem' }}>
+                  View PO #{match[1]} →
+                </Button>
+              )
+            }
+            return null
+          })()}
+        </div>
+      )}
 
       <div className="proc-tabs">
         {TABS.map((t) => <button key={t} type="button" className={`proc-tab ${tab === t ? 'proc-tab--active' : ''}`} onClick={() => setTab(t)}>{t}</button>)}

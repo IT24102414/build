@@ -197,7 +197,7 @@ export default function QualityInspectionsPage() {
       <PageHeader
         title="Quality Inspections"
         description="Material accepted, partially accepted or rejected on site. Rejected lines automatically raise a non-conformance."
-        actions={canInspect ? <Button onClick={openRecordModal}>+ Record Inspection</Button> : null}
+        actions={canInspect ? <Button onClick={openRecordModal}>+ Record Inspection</Button> : <StatusBadge status="neutral">Read only</StatusBadge>}
       />
 
       {recordNotice && (

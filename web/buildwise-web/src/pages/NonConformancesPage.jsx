@@ -3,7 +3,6 @@ import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader,
 import { qualityApi } from '../services/qualityApi'
 import { useAuth } from '../auth/AuthContext'
 import NcrRecord from '../Features/quality/components/NcrRecord'
-import QualityLifecycleFlow from '../Features/quality/components/QualityLifecycleFlow'
 import {
   NCR_TRANSITIONS,
   RESOLUTION_REQUIRED,
@@ -120,8 +119,6 @@ export default function NonConformancesPage() {
         title="Non-Conformance Reports"
         description="Every rejected inspection line raises an NCR automatically. Review these to a resolution and close them."
       />
-
-      <QualityLifecycleFlow activeKey="ncr" />
 
       {actionError && (
         <ErrorState title="Could not save that change" message={actionError} />

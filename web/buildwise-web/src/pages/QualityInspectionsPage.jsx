@@ -3,7 +3,6 @@ import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader,
 import { qualityApi } from '../services/qualityApi'
 import QualityRiskPanel from '../Features/quality/components/QualityRiskPanel'
 import QualityChecklist from '../Features/quality/components/QualityChecklist'
-import QualityLifecycleFlow from '../Features/quality/components/QualityLifecycleFlow'
 
 import './common/common.css'
 
@@ -13,9 +12,7 @@ import './common/common.css'
  * Split from the former single "Quality Inspections & Non-Conformance" page so
  * that inspecting a delivery and resolving a non-conformance become two
  * distinct jobs for two distinct audiences: a Quality Inspector records the
- * inspection, a Procurement Manager or Site Manager closes the NCR. The
- * lifecycle bar at the top states how an inspection connects back to the
- * delivery that produced it and forward to any NCR it spawns.
+ * inspection, a Procurement Manager or Site Manager closes the NCR.
  */
 export default function QualityInspectionsPage() {
   const [inspections, setInspections] = useState([])
@@ -92,9 +89,6 @@ export default function QualityInspectionsPage() {
         title="Quality Inspections"
         description="Material accepted, partially accepted or rejected on site. Rejected lines automatically raise a non-conformance."
       />
-
-      <QualityLifecycleFlow activeKey="inspection" />
-
 
       <div className="grid grid--4">
         {summaryCards.map(([label, value, note, color]) => (

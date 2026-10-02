@@ -281,28 +281,13 @@ describe('QualityInspectionsPage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'NCR-781611' })).not.toBeInTheDocument())
   })
 
-  it('shows the material lifecycle chain on the inspections screen', async () => {
+  it('shows the inspection summary cards on the inspections screen', async () => {
     render(<QualityInspectionsPage />)
     await screen.findByText('INS-34')
 
-    // The point of the split: the chain states that an inspection comes from a
-    // delivery and feeds non-conformances.
-    const flow = await screen.findByTestId('lifecycle-flow')
-    for (const stage of ['request', 'approval', 'rfq', 'quotation', 'po', 'delivery', 'inspection', 'ncr', 'resolution']) {
-      expect(within(flow).getByTestId(`lifecycle-stage-${stage}`)).toBeInTheDocument()
-    }
-    // The active stage is the page you are on.
-    expect(screen.getByTestId('lifecycle-stage-inspection')).toHaveAttribute('aria-current', 'step')
-  })
-
-  it('shows a dash for a lifecycle stage the caller cannot read', async () => {
-    // A Quality Inspector cannot read RFQs (ProcurementStaffAndAdmin only), so
-    // that stage must not claim a count of zero.
-    render(<QualityInspectionsPage />)
-    await screen.findByText('INS-34')
-
-    const rfqStage = await screen.findByTestId('lifecycle-stage-rfq')
-    expect(within(rfqStage).getByText('—')).toBeInTheDocument()
+    expect(screen.getByText('Inspections')).toBeInTheDocument()
+    expect(screen.getByText('Units inspected')).toBeInTheDocument()
+    expect(screen.getByText('Units rejected')).toBeInTheDocument()
   })
 })
 
@@ -318,12 +303,11 @@ describe('NonConformancesPage', () => {
     useAuth.mockReturnValue({ hasRole: () => true, roles: ['ProcurementManager'] })
   })
 
-  it('lists non-conformances and highlights the NCR lifecycle stage', async () => {
+  it('lists non-conformances and displays summary cards', async () => {
     render(<NonConformancesPage />)
 
     expect(await screen.findByText('NCR-781611')).toBeInTheDocument()
-    // The active stage is the page you are on.
-    expect(screen.getByTestId('lifecycle-stage-ncr')).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByText('Total NCRs')).toBeInTheDocument()
   })
 
   it('does not show the inspections list on the non-conformance screen', async () => {

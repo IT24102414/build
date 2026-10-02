@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader, SelectInput, StatusBadge, TextInput } from '../components/shared'
 import { qualityApi } from '../services/qualityApi'
 import QualityRiskPanel from '../Features/quality/components/QualityRiskPanel'
@@ -53,7 +53,26 @@ export default function QualityInspectionsPage() {
   const [submittingInspection, setSubmittingInspection] = useState(false)
   const [recordError, setRecordError] = useState(null)
   const [recordNotice, setRecordNotice] = useState(null)
+  const [previewImage, setPreviewImage] = useState(null)
   const [form, setForm] = useState(INITIAL_INSPECTION_FORM)
+
+  const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
+
+  function handleImageFile(file) {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target.result
+      setPreviewImage(dataUrl)
+      setForm((p) => ({
+        ...p,
+        evidenceFileName: file.name || `photo-${Date.now()}.jpg`,
+        evidenceFileUrl: dataUrl,
+      }))
+    }
+    reader.readAsDataURL(file)
+  }
 
   async function runRiskAnalysis(inspectionId) {
     if (analysisById[inspectionId]) {
@@ -97,6 +116,7 @@ export default function QualityInspectionsPage() {
   async function openRecordModal() {
     setIsRecordOpen(true)
     setRecordError(null)
+    setPreviewImage(null)
     try {
       const delList = await qualityApi.listDeliveries()
       const normalized = Array.isArray(delList) ? delList : (delList.deliveries ?? [])
@@ -165,6 +185,7 @@ export default function QualityInspectionsPage() {
       const created = await qualityApi.completeInspection(payload)
       setRecordNotice(`Inspection INS-${created.id} recorded successfully!${rejected > 0 ? ' Non-conformance report (NCR) raised automatically.' : ''}`)
       setIsRecordOpen(false)
+      setPreviewImage(null)
       setForm(INITIAL_INSPECTION_FORM)
       await load()
     } catch (err) {
@@ -398,7 +419,81 @@ export default function QualityInspectionsPage() {
             )}
           </Card>
 
-          <Card title="4. Evidence & Inspector Comments">
+          <Card title="4. Evidence & Inspector Comments" subtitle="Attach site photos, test certificates, or capture directly with device camera.">
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => { if (e.target.files?.[0]) handleImageFile(e.target.files[0]) }}
+            />
+            <input
+              type="file"
+              ref={cameraInputRef}
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={(e) => { if (e.target.files?.[0]) handleImageFile(e.target.files[0]) }}
+            />
+
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                📷 Open Camera / Capture
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                📁 Upload Evidence Photo
+              </Button>
+            </div>
+
+            {previewImage && (
+              <div
+                style={{
+                  marginBottom: '1rem',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <img
+                    src={previewImage}
+                    alt="Evidence Preview"
+                    style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #ccc' }}
+                  />
+                  <div>
+                    <strong style={{ fontSize: '0.9rem', display: 'block' }}>{form.evidenceFileName || 'Captured Photo'}</strong>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Photo attached and ready for inspection record</span>
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => {
+                    setPreviewImage(null)
+                    setForm((p) => ({ ...p, evidenceFileName: '', evidenceFileUrl: '' }))
+                  }}
+                  style={{ fontSize: '0.8rem', padding: '0.3rem 0.6rem' }}
+                >
+                  ✕ Remove
+                </Button>
+              </div>
+            )}
+
             <div className="form-grid">
               <TextInput
                 label="Evidence File Name (Optional)"
@@ -408,7 +503,7 @@ export default function QualityInspectionsPage() {
               />
               <TextInput
                 label="Evidence File URL (Optional)"
-                value={form.evidenceFileUrl}
+                value={form.evidenceFileUrl && form.evidenceFileUrl.length > 80 ? `${form.evidenceFileUrl.substring(0, 40)}... (Base64 Image Attached)` : form.evidenceFileUrl}
                 onChange={(e) => setForm((p) => ({ ...p, evidenceFileUrl: e.target.value }))}
                 placeholder="e.g. https://storage.buildwise.demo/qc/img-01.jpg"
               />

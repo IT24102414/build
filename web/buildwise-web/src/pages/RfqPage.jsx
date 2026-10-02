@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, TextInput, SelectInput } from '../components/shared'
 import { procurementApi } from '../Features/procurement/services/procurementApi'
 import { statusTone } from '../Features/procurement/components/statusTone'
+import { useAuth } from '../auth/AuthContext'
+import { hasAnyRole, ROLES } from '../auth/accessControl'
 import './common/common.css'
 
 // Returns today's date as YYYY-MM-DD (local timezone)
@@ -20,6 +22,9 @@ function isFutureDate(dateStr) {
 }
 
 export default function RfqPage() {
+  const { roles } = useAuth()
+  const canIssue = hasAnyRole(roles, [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.Administrator])
+
   const [rfqs, setRfqs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -28,13 +33,21 @@ export default function RfqPage() {
   const [creating, setCreating] = useState(false)
   const [requests, setRequests] = useState([])
   const [suppliers, setSuppliers] = useState([])
+  const [notice, setNotice] = useState('')
   const [form, setForm] = useState({
     materialRequestId: '',
     requiredResponseDate: plusDays(7),
     notes: '',
     supplierIds: [],
+    additionalEmail: '',
   })
   const [formError, setFormError] = useState('')
+
+  // Email dispatch inside detail drawer
+  const [dispatchEmail, setDispatchEmail] = useState('')
+  const [customMsg, setCustomMsg] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailStatus, setEmailStatus] = useState('')
 
   async function load() {
     setLoading(true)
@@ -54,18 +67,21 @@ export default function RfqPage() {
     setCreating(true)
     setFormError('')
     setError('')
+    setNotice('')
     try {
       const [rs, ss] = await Promise.all([
         procurementApi.listApprovedMaterialRequests(),
         procurementApi.listSuppliers({ pageSize: 100 }),
       ])
       setRequests(rs)
-      setSuppliers(ss.items ?? ss)
+      const supplierList = ss.items ?? ss
+      setSuppliers(supplierList)
       setForm({
         materialRequestId: rs[0]?.id ?? '',
         requiredResponseDate: plusDays(7),
         notes: '',
         supplierIds: [],
+        additionalEmail: '',
       })
     } catch (err) {
       setError(err.message)
@@ -97,11 +113,13 @@ export default function RfqPage() {
 
     setError('')
     try {
-      await procurementApi.createRfq({
+      const created = await procurementApi.createRfq({
         ...form,
         materialRequestId: Number(form.materialRequestId),
+        additionalEmail: form.additionalEmail.trim() || undefined,
       })
       setCreating(false)
+      setNotice(`✓ RFQ #${created.id} issued successfully! Automated email invitations have been dispatched to the invited suppliers and procurement desk.`)
       await load()
     } catch (err) {
       setFormError(err.message)
@@ -118,6 +136,26 @@ export default function RfqPage() {
     }
   }
 
+  async function handleSendEmail(e) {
+    e.preventDefault()
+    if (!dispatchEmail.trim() || !selected) return
+    setSendingEmail(true)
+    setEmailStatus('')
+    try {
+      const res = await procurementApi.sendRfqEmail(selected.id, {
+        recipientEmail: dispatchEmail.trim(),
+        customMessage: customMsg.trim() || undefined,
+      })
+      setEmailStatus(`✓ ${res.message || 'RFQ notification email sent successfully!'}`)
+      setDispatchEmail('')
+      setCustomMsg('')
+    } catch (err) {
+      setEmailStatus(`⚠ ${err.message}`)
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
   const filteredRfqs = statusFilter === 'all'
     ? rfqs
     : rfqs.filter((r) => r.status === statusFilter)
@@ -130,15 +168,24 @@ export default function RfqPage() {
       <PageHeader
         eyebrow="Procurement office"
         title="Requests for Quotation"
-        description="Issue supplier requests for quotation, track invitations, and close the quotation window."
-        actions={<Button onClick={openCreate}>+ Issue RFQ</Button>}
+        description="Issue supplier requests for quotation, dispatch automated invitation emails, and track submissions."
+        actions={canIssue ? <Button onClick={openCreate}>+ Issue RFQ</Button> : null}
       />
+
+      {notice && (
+        <Card style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{notice}</span>
+            <Button variant="secondary" onClick={() => setNotice('')} style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}>Dismiss</Button>
+          </div>
+        </Card>
+      )}
 
       {error && <ErrorState message={error} />}
 
       {/* ── Create form ── */}
       {creating && (
-        <Card title="Issue New RFQ" subtitle="RFQs can only be created for Approved material requests">
+        <Card title="Issue New RFQ" subtitle="RFQs can only be created for Approved material requests. Email invitations will be dispatched automatically.">
           <form className="stack" onSubmit={create}>
             <div className="form-grid">
               <SelectInput
@@ -171,16 +218,26 @@ export default function RfqPage() {
               </div>
             </div>
 
-            <TextInput
-              label="Notes"
-              multiline
-              value={form.notes}
-              onChange={(e) => setForm((c) => ({ ...c, notes: e.target.value }))}
-              hint="Optional notes for suppliers."
-            />
+            <div className="form-grid">
+              <TextInput
+                label="Additional Notification / Manager Email (Optional)"
+                type="email"
+                value={form.additionalEmail}
+                onChange={(e) => setForm((c) => ({ ...c, additionalEmail: e.target.value }))}
+                placeholder="e.g. procurement.manager@buildwise.demo"
+                hint="A copy of the RFQ requirements will be emailed to this address upon issuance."
+              />
+              <TextInput
+                label="Procurement Notes / Instructions"
+                value={form.notes}
+                onChange={(e) => setForm((c) => ({ ...c, notes: e.target.value }))}
+                placeholder="e.g. Standard delivery to Colombo site with warranty..."
+                hint="Optional commercial or delivery notes included in the email."
+              />
+            </div>
 
             <div>
-              <strong className="field__label">Invite Active Suppliers</strong>
+              <strong className="field__label">Invite Active Suppliers (Email Dispatches)</strong>
               {suppliers.filter((s) => s.status === 'Active').length === 0 && (
                 <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-sm)', marginTop: '0.5rem' }}>
                   No active suppliers found.
@@ -193,8 +250,8 @@ export default function RfqPage() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.4rem 0.8rem',
+                      gap: '0.5rem',
+                      padding: '0.5rem 0.85rem',
                       borderRadius: '8px',
                       border: form.supplierIds.includes(supplier.id)
                         ? '1.5px solid var(--color-primary-600)'
@@ -213,10 +270,17 @@ export default function RfqPage() {
                       checked={form.supplierIds.includes(supplier.id)}
                       onChange={() => toggleSupplier(supplier.id)}
                     />
-                    {supplier.name}
+                    <span>
+                      {supplier.name}
+                      {supplier.email && <small style={{ display: 'block', fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>✉ {supplier.email}</small>}
+                    </span>
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div style={{ padding: '0.65rem 0.85rem', background: 'var(--color-surface-muted)', borderRadius: '6px', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              ✉ <strong>Automated Email Notification:</strong> Submitting this form will send an RFQ invitation email containing all requested item specifications and the response deadline to each selected supplier.
             </div>
 
             {formError && <span className="field__error" style={{ fontSize: '0.9rem' }}>⚠ {formError}</span>}
@@ -227,7 +291,7 @@ export default function RfqPage() {
                 type="submit"
                 disabled={!form.materialRequestId || form.supplierIds.length === 0 || !isFutureDate(form.requiredResponseDate)}
               >
-                Issue RFQ
+                Issue RFQ & Send Emails
               </Button>
             </div>
           </form>
@@ -298,7 +362,7 @@ export default function RfqPage() {
                       <StatusBadge status={statusTone(rfq.status)}>{rfq.status}</StatusBadge>
                     </td>
                     <td>
-                      <button className="table-action" onClick={() => setSelected(rfq)}>View</button>
+                      <button className="table-action" onClick={() => { setSelected(rfq); setEmailStatus(''); }}>View</button>
                     </td>
                   </tr>
                 ))}
@@ -344,7 +408,7 @@ export default function RfqPage() {
               </div>
             </Card>
 
-            <Card title="Invited Suppliers" subtitle={`${(selected.suppliers || []).length} suppliers invited to submit quotations`}>
+            <Card title="Invited Suppliers & Notification Status" subtitle={`${(selected.suppliers || []).length} suppliers invited to submit quotations`}>
               {(!selected.suppliers || selected.suppliers.length === 0) ? (
                 <EmptyState title="No suppliers invited" message="No suppliers recorded for this RFQ." />
               ) : (
@@ -353,6 +417,7 @@ export default function RfqPage() {
                     <thead>
                       <tr>
                         <th>Supplier</th>
+                        <th>Contact / Email</th>
                         <th>Supplier Status</th>
                         <th>Invitation</th>
                       </tr>
@@ -361,6 +426,10 @@ export default function RfqPage() {
                       {selected.suppliers.map((s) => (
                         <tr key={s.id || s.supplierId}>
                           <td><strong>{s.supplierName}</strong></td>
+                          <td>
+                            <div>{s.contactPerson || '—'}</div>
+                            {s.supplierEmail && <small className="muted">✉ {s.supplierEmail}</small>}
+                          </td>
                           <td>
                             <StatusBadge status={statusTone(s.supplierStatus || 'Active')}>
                               {s.supplierStatus || 'Active'}
@@ -377,6 +446,38 @@ export default function RfqPage() {
                   </table>
                 </div>
               )}
+            </Card>
+
+            {/* ── Resend / Send Email Panel ── */}
+            <Card title="Dispatch RFQ Notification Email" subtitle="Send an RFQ invitation or reminder to a specific supplier or manager email address.">
+              <form onSubmit={handleSendEmail} className="stack">
+                <div className="form-grid">
+                  <TextInput
+                    label="Recipient Email Address"
+                    type="email"
+                    required
+                    value={dispatchEmail}
+                    onChange={(e) => setDispatchEmail(e.target.value)}
+                    placeholder="e.g. sales@suppliera.demo or manager@buildwise.demo"
+                  />
+                  <TextInput
+                    label="Custom Message (Optional)"
+                    value={customMsg}
+                    onChange={(e) => setCustomMsg(e.target.value)}
+                    placeholder="e.g. Please expedite pricing for 450 bags..."
+                  />
+                </div>
+                {emailStatus && (
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: emailStatus.startsWith('✓') ? '#166534' : '#b91c1c' }}>
+                    {emailStatus}
+                  </div>
+                )}
+                <div className="form-actions">
+                  <Button type="submit" disabled={sendingEmail || !dispatchEmail.trim()}>
+                    {sendingEmail ? 'Sending Email…' : '✉ Send RFQ Email'}
+                  </Button>
+                </div>
+              </form>
             </Card>
 
             {selected.status === 'Issued' && (

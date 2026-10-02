@@ -177,6 +177,7 @@ export const procurementApi = {
   createRfq: (data) => request('/rfqs', { method: 'POST', body: data }),
   addRfqSuppliers: (id, supplierIds) => request(`/rfqs/${id}/suppliers`, { method: 'POST', body: { supplierIds } }),
   closeRfq: (id, reason) => request(`/rfqs/${id}/close`, { method: 'POST', body: { reason } }),
+  sendRfqEmail: (id, payload) => request(`/rfqs/${id}/send-email`, { method: 'POST', body: payload }),
 
   // Agentic AI workflow
   startWorkflow: (requestId, body) => request(`/material-requests/${requestId}/procurement-workflow`, { method: 'POST', body: body ?? {}, mockFallback: () => ({ workflowId: MOCK.workflow.id, status: MOCK.workflow.status, message: 'Quotation & Supplier Analysis Agent completed (demo data — agent service not reachable).' }) }),

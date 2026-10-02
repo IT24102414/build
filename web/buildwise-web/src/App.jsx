@@ -86,6 +86,7 @@ export default function App() {
             )}
           />
         ))}
+        <Route path="/procurement" element={<Navigate to="/quotations" replace />} />
         <Route index element={<Navigate to={home} replace />} />
         <Route path="*" element={<ComingSoon title="Page not found" />} />
       </Route>

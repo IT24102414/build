@@ -112,17 +112,16 @@ export default function AgentWorkflowsPage() {
         <Card>
           <div className="table-wrap">
             <table className="data-table">
-              <thead><tr><th>#</th><th>Objective</th><th>Status</th><th>Approval</th><th>Steps</th><th>Created</th><th /></tr></thead>
+              <thead><tr><th>#</th><th>Objective</th><th>Status</th><th>Approval</th><th>Steps</th><th>Created</th></tr></thead>
               <tbody>
                 {workflows.map((workflow) => (
-                  <tr key={workflow.id}>
-                    <td>{workflow.id}</td>
+                  <tr key={workflow.id} onClick={() => showDetails(workflow.id)} style={{ cursor: 'pointer' }}>
+                    <td><strong>#{workflow.id}</strong></td>
                     <td>{workflow.objective}</td>
                     <td><StatusBadge status={statusTone(workflow.status)}>{workflow.status}</StatusBadge></td>
                     <td>{workflow.approvalStatus}</td>
                     <td>{workflow.stepCount} ({workflow.failedStepCount} failed)</td>
                     <td>{new Date(workflow.createdAt).toLocaleString()}</td>
-                    <td><button className="table-action" type="button" onClick={() => showDetails(workflow.id)}>History</button></td>
                   </tr>
                 ))}
               </tbody>

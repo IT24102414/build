@@ -51,7 +51,7 @@
 - **Capabilities:** Evaluates vendor pricing outliers, delivery lead times, reliability metrics, and returns structured recommendations.
 
 ### 6. Security & RBAC (10 Marks)
-- Strict Supplier Portal isolation: external suppliers can only view RFQs assigned to them and submit quotes; internal cost models and rival quotes are redacted.
+- Seven internal roles only. **Suppliers are external stakeholders and have no BuildWise account, JWT or portal**: the Procurement Officer emails an RFQ, records the quotation returned by email, and the purchase order is communicated externally. `RbacAuthorizationTests.cs` proves a legacy `Supplier` claim is refused by every endpoint.
 - Budget boundary enforcement (14 specialized tests in `BudgetValidationTests.cs`).
 
 ### 7. Testing & Quality (8 Marks)

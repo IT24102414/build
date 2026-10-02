@@ -7,6 +7,14 @@ import '../widgets/procurement_status_tone.dart';
 
 /// Quotation comparison and the QuotationSupplierAnalysisAgent decision.
 ///
+/// **Not routed in the Flutter shell.** Comparing quotations and approving them
+/// is Procurement Officer / Procurement Manager desk work and runs on the web
+/// application. Suppliers are external parties contacted by email: they send
+/// their quotation back to the officer, who records it in BuildWise. Nothing in
+/// this flow belongs on a site device, so the mobile shell sends those two roles
+/// to the web-only notice instead. See `core/auth/buildwise_roles.dart`
+/// (`webOnly`) and `features/auth/screens/web_only_notice_screen.dart`.
+///
 /// This is the Component 2 human/agent boundary:
 ///   quotations arrive -> the agent ranks eligible suppliers (:8001)
 ///   -> a manager accepts or overrides at the approval boundary

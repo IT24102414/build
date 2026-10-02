@@ -3,6 +3,7 @@ using System;
 using BuildWise.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BuildWise.Api.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002104811_RemoveSupplierUserAccount")]
+    partial class RemoveSupplierUserAccount
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1378,6 +1381,11 @@ namespace BuildWise.Api.Data.Migrations
                         },
                         new
                         {
+                            Id = 3,
+                            Name = "ProjectManager"
+                        },
+                        new
+                        {
                             Id = 4,
                             Name = "ProcurementOfficer"
                         },
@@ -1385,6 +1393,11 @@ namespace BuildWise.Api.Data.Migrations
                         {
                             Id = 5,
                             Name = "ProcurementManager"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Name = "ReceivingOfficer"
                         },
                         new
                         {
@@ -1400,6 +1413,11 @@ namespace BuildWise.Api.Data.Migrations
                         {
                             Id = 9,
                             Name = "SiteManager"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Name = "Supplier"
                         });
                 });
 

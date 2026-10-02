@@ -10,11 +10,19 @@ class _DemoAccount {
   final String email;
 }
 
+/// Seeded accounts for the three roles that use the mobile field app.
+///
+/// The Site Manager, Procurement Officer, Procurement Manager and Administrator
+/// are deliberately absent: their work runs on the web application. Signing in
+/// as one of them on mobile shows the web-only notice. See
+/// `core/auth/buildwise_roles.dart` (`mobileCapable`).
+///
+/// There is no supplier account. Suppliers are external parties contacted by
+/// email and never sign in to BuildWise.
 const _demoAccounts = [
   _DemoAccount('Site Engineer', 'site.engineer@buildwise.demo'),
-  _DemoAccount('Procurement Officer', 'procurement.officer@buildwise.demo'),
-  _DemoAccount('Procurement Manager', 'procurement.manager@buildwise.demo'),
-  _DemoAccount('Administrator', 'admin@buildwise.demo'),
+  _DemoAccount('Site Officer', 'site.officer@buildwise.demo'),
+  _DemoAccount('Quality Inspector', 'quality.inspector@buildwise.demo'),
 ];
 const _demoPassword = 'Passw0rd!';
 

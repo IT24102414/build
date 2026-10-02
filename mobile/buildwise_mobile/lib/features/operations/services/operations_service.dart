@@ -95,17 +95,15 @@ class OperationsService {
   Future<Map<String, dynamic>> recordDelivery({
     required int purchaseOrderId,
     required String reference,
-    required int materialId,
-    required double received,
-    required double damaged,
+    required List<Map<String, dynamic>> items,
+    List<Map<String, dynamic>> evidence = const [],
   }) async {
     final response = await _apiClient.post('/deliveries', body: {
       'purchaseOrderId': purchaseOrderId,
       'deliveryReference': reference,
       'status': 'Arrived',
-      'items': [
-        {'materialId': materialId, 'receivedQuantity': received, 'damagedQuantity': damaged},
-      ],
+      'items': items,
+      'evidence': evidence,
     });
     return _map(response, 'record delivery');
   }
@@ -294,6 +292,24 @@ class OperationsService {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_error(response, 'Could not mark notification read'));
     }
+  }
+
+  // ------------------------------------------------- field reference data
+
+  /// Active projects for the create-request form's project dropdown.
+  ///
+  /// The form must not hard-code a project id: the engineer works across
+  /// several sites, and a seeded "Project #1" would silently file every request
+  /// under the wrong block.
+  Future<List<Map<String, dynamic>>> listProjects() async {
+    final response = await _apiClient.get('/projects');
+    return _list(response, 'projects');
+  }
+
+  /// Active materials for the create-request form's material dropdown.
+  Future<List<Map<String, dynamic>>> listMaterials() async {
+    final response = await _apiClient.get('/materials');
+    return _list(response, 'materials');
   }
 
   List<Map<String, dynamic>> _list(dynamic response, String label) {

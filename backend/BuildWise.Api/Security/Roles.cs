@@ -9,18 +9,56 @@ namespace BuildWise.Api.Security;
 public static class Roles
 {
     public const string Administrator = "Administrator";
-    public const string ProjectManager = "ProjectManager";
     public const string SiteEngineer = "SiteEngineer";
     public const string SiteOfficer = "SiteOfficer";
     public const string SiteManager = "SiteManager";
     public const string ProcurementOfficer = "ProcurementOfficer";
     public const string ProcurementManager = "ProcurementManager";
-    public const string ReceivingOfficer = "ReceivingOfficer";
     public const string QualityInspector = "QualityInspector";
 
-    /// <summary>External supplier portal user. Bound to exactly one supplier
-    /// record through <c>User.SupplierId</c> and surfaced as a JWT claim.</summary>
-    public const string Supplier = "Supplier";
+    /// <summary>
+    /// The seven internal application roles, in workflow order. This is the
+    /// complete set of roles a person can sign in with.
+    /// <para>
+    /// There is deliberately no <c>Supplier</c> role. Suppliers are external
+    /// stakeholders, not BuildWise users: they have no account, no JWT and no
+    /// portal. Procurement reaches them by email, and the quotations they send
+    /// back are recorded by the Procurement Officer. The <see cref="Models.Entities.Supplier"/>
+    /// business entity still exists — it is referenced by RFQs, quotations,
+    /// purchase orders and deliveries — but it is not a login.
+    /// </para>
+    /// <para>
+    /// The former <c>ReceivingOfficer</c> and <c>ProjectManager</c> roles were
+    /// legacy aliases and have been retired. Both were strict subsets of the
+    /// role that replaced them — <c>ReceivingOfficer</c> ⊂ <c>SiteOfficer</c>
+    /// (receiving) and <c>ProjectManager</c> ⊂ <c>SiteManager</c> (approval) —
+    /// so the migration could only widen access, never narrow it unexpectedly.
+    /// <see cref="Legacy"/> records the mapping used by the data migration.
+    /// </para>
+    /// </summary>
+    public static readonly string[] All = {
+        SiteEngineer,
+        SiteManager,
+        ProcurementOfficer,
+        ProcurementManager,
+        SiteOfficer,
+        QualityInspector,
+        Administrator
+    };
+
+    /// <summary>
+    /// Retired role names mapped to their canonical replacement.
+    /// <para>
+    /// Used by the <c>ConsolidateLegacyRoles</c> migration to re-point existing
+    /// user accounts. Each mapping was verified to be a permission superset, so
+    /// no user loses access: see the summary on <see cref="All"/>.
+    /// </para>
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> Legacy = new Dictionary<string, string>
+    {
+        ["ReceivingOfficer"] = SiteOfficer,
+        ["ProjectManager"] = SiteManager
+    };
 
     // --- Composite role sets -------------------------------------------------
     // SiteOfficer is the receiving-facing alias of SiteEngineer; SiteManager is
@@ -44,7 +82,7 @@ public static class Roles
 
     /// <summary>Roles permitted to act on the delivery / receiving surface.
     /// Procurement Officers are included so they can track PO fulfilment.</summary>
-    public const string DeliveryParticipants = SiteOperations + "," + ReceivingOfficer
+    public const string DeliveryParticipants = SiteOperations
         + "," + QualityInspector + "," + ProcurementOfficer + "," + ProcurementManagers + "," + Administrator;
 }
 
@@ -88,30 +126,22 @@ public static class Policies
     /// </summary>
     public const string MaterialRequestReaders = "MaterialRequestReaders";
 
-    /// <summary>Every authenticated internal staff member (excludes Supplier portal users).</summary>
+    /// <summary>Every authenticated internal staff member.</summary>
     public const string InternalStaffOnly = "InternalStaffOnly";
 
     /// <summary>
     /// Roles permitted to read the delivery / receiving surface: site, receiving,
-    /// quality and procurement management. Excludes Supplier portal users, who use
-    /// their own supplier-scoped endpoints instead.
+    /// quality and procurement management.
     /// </summary>
     public const string DeliveryParticipantsOnly = "DeliveryParticipantsOnly";
-
-    /// <summary>External supplier portal users only.</summary>
-    public const string SupplierPortalOnly = "SupplierPortalOnly";
 }
 
 /// <summary>
-/// Helpers for reading the caller's roles and their bound supplier identity out
-/// of the validated JWT. Centralised so every controller scopes data the same way.
-/// Named <c>CallerScope</c> rather than <c>PrincipalExtensions</c> to avoid
-/// colliding with <c>System.Security.Claims.PrincipalExtensions</c>.
+/// Helpers for reading the caller's roles out of the validated JWT. Centralised
+/// so every controller scopes data the same way.
 /// </summary>
 public static class CallerScope
 {
-    public const string SupplierIdClaim = "supplier_id";
-
     public static IReadOnlyList<string> GetRoleNames(this System.Security.Claims.ClaimsPrincipal principal) =>
         principal.FindAll(System.Security.Claims.ClaimTypes.Role)
             .Select(claim => claim.Value)
@@ -120,16 +150,4 @@ public static class CallerScope
 
     public static bool IsInAnyRole(this System.Security.Claims.ClaimsPrincipal principal, params string[] roles) =>
         principal.GetRoleNames().Any(roles.Contains);
-
-    /// <summary>
-    /// Returns the supplier this caller is bound to, or <c>null</c> when the caller
-    /// is not a supplier portal user. Supplier-scoped endpoints must call this and
-    /// reject <c>null</c> — never accept a supplier id from the request body.
-    /// </summary>
-    public static int? GetBoundSupplierId(this System.Security.Claims.ClaimsPrincipal principal)
-    {
-        var raw = principal.FindFirst(SupplierIdClaim)?.Value
-                  ?? principal.FindFirst("supplierId")?.Value;
-        return int.TryParse(raw, out var id) && id > 0 ? id : null;
-    }
 }

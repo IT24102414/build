@@ -11,7 +11,6 @@ import AgentWorkflowsPage from './pages/AgentWorkflowsPage'
 import AdministrationPage from './pages/AdministrationPage'
 import DashboardPage from './pages/DashboardPage'
 import RfqPage from './pages/RfqPage'
-import SupplierPortalPage from './pages/SupplierPortalPage'
 import LoginPage from './auth/LoginPage'
 import ProtectedRoute from './auth/ProtectedRoute'
 import { useAuth } from './auth/AuthContext'
@@ -59,7 +58,6 @@ function renderScreen({ screen, section }) {
     case 'Administration': return <AdministrationPage />
     case 'RFQs': return <RfqPage />
     case 'Dashboard': return <DashboardPage />
-    case 'Supplier': return <SupplierPortalPage section={section} />
     default: return <ProcurementWorkstation section={section} />
   }
 }

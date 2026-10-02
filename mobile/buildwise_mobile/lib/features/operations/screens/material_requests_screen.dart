@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/error_widget.dart' as buildwise;
+import '../../../core/widgets/field_format.dart';
+import '../../../core/widgets/field_messages.dart';
 import '../../../core/widgets/widgets.dart' hide ErrorWidget;
 import '../services/operations_service.dart';
 import '../widgets/agent_analysis_panels.dart';
@@ -56,7 +58,7 @@ class _MaterialRequestsScreenState extends State<MaterialRequestsScreen> {
     final id = (request['id'] as num).toInt();
     await showAiAnalysisSheet(
       context,
-      title: 'AI Request Analysis — MR-$id',
+      title: 'AI Request Analysis - MR-$id',
       run: () => (widget.service ?? _service).analyzeRequest(id),
       builder: buildRequestAnalysisPanel,
     );
@@ -240,125 +242,286 @@ class _CreateRequestSheet extends StatefulWidget {
 }
 
 class _CreateRequestSheetState extends State<_CreateRequestSheet> {
-  final _quantity = TextEditingController(text: '250');
-  final _reason = TextEditingController(text: 'Urgent site requirement');
+  final _quantity = TextEditingController();
+  final _reason = TextEditingController();
   final _siteNotes = TextEditingController();
-  final _description = TextEditingController(text: 'OPC 42.5N, 50 kg bag');
-  final _unit = TextEditingController(text: 'bags');
-  final _requestDate = DateTime.now();
+
+  /// Populated from `/projects` and `/materials`. This form previously submitted
+  /// a hard-coded `projectId: 1, materialId: 1`, which silently filed every
+  /// request against the first seeded row - wrong project, wrong material, and
+  /// no way for the engineer to notice on the form.
+  List<Map<String, dynamic>> _projects = const [];
+  List<Map<String, dynamic>> _materials = const [];
+  int? _projectId;
+  int? _materialId;
+
+  /// Unit comes from the chosen material's master record, so the engineer does
+  /// not have to remember whether cement is counted in bags or tonnes.
+  String _unit = '';
+
   DateTime _requiredDate = DateTime.now().add(const Duration(days: 5));
   String _priority = 'Normal';
+
+  bool _loadingOptions = true;
   bool _submitting = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOptions();
+  }
+
+  Future<void> _loadOptions() async {
+    try {
+      final results = await Future.wait([
+        widget.service.listProjects(),
+        widget.service.listMaterials(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _projects = results[0];
+        _materials = results[1];
+        // Preselect only when there is exactly one candidate; otherwise the
+        // engineer must choose deliberately.
+        _projectId = _projects.length == 1 ? _projects.first['id'] as int? : null;
+        if (_materials.length == 1) _selectMaterial(_materials.first);
+        _loadingOptions = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingOptions = false;
+        _error = FieldMessages.friendly(error.toString());
+      });
+    }
+  }
+
+  void _selectMaterial(Map<String, dynamic> material) {
+    setState(() {
+      _materialId = material['id'] as int?;
+      _unit = material['unit']?.toString() ?? '';
+    });
+  }
 
   @override
   void dispose() {
     _quantity.dispose();
     _reason.dispose();
     _siteNotes.dispose();
-    _description.dispose();
-    _unit.dispose();
     super.dispose();
   }
 
+  /// Client-side validation, for immediate feedback only.
+  ///
+  /// This is UX. The backend re-validates every field and stays authoritative -
+  /// a bypassed check must still fail server-side.
+  String? _validate() {
+    if (_projectId == null) return 'Select a project.';
+    if (_materialId == null) return 'Select a material.';
+
+    final rawQuantity = _quantity.text.trim();
+    if (rawQuantity.isEmpty) return 'Enter a quantity.';
+    final quantity = double.tryParse(rawQuantity);
+    if (quantity == null) return 'Quantity must be a number.';
+    if (quantity <= 0) return 'Quantity must be greater than zero.';
+
+    if (_requiredDate.isBefore(DateTime.now())) {
+      return 'Required date cannot be in the past.';
+    }
+    if (_reason.text.trim().isEmpty) {
+      return 'Enter a justification for this request.';
+    }
+    return null;
+  }
+
   Future<void> _submit() async {
-    final quantity = double.tryParse(_quantity.text) ?? 0;
-    if (quantity <= 0 || _reason.text.trim().isEmpty) {
-      setState(() => _error = 'Enter a positive quantity and reason.');
+    final problem = _validate();
+    if (problem != null) {
+      setState(() => _error = problem);
       return;
     }
-    setState(() { _submitting = true; _error = null; });
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
     try {
+      final material = _materials.firstWhere((m) => m['id'] == _materialId);
       await widget.service.createRequest(
-        projectId: 1,
-        requiredDate: _requiredDate.toIso8601String().substring(0, 10),
-        materialId: 1,
-        quantity: quantity,
+        projectId: _projectId!,
+        requiredDate: _dateOnly(_requiredDate),
+        materialId: _materialId!,
+        quantity: double.parse(_quantity.text.trim()),
         reason: _reason.text.trim(),
         priority: _priority,
         siteNotes: _siteNotes.text.trim().isEmpty ? null : _siteNotes.text.trim(),
-        description: _description.text.trim().isEmpty ? null : _description.text.trim(),
-        unit: _unit.text.trim().isEmpty ? null : _unit.text.trim(),
-        itemRequiredDate: _requiredDate.toIso8601String().substring(0, 10),
+        description: material['name']?.toString(),
+        unit: _unit.isEmpty ? null : _unit,
+        itemRequiredDate: _dateOnly(_requiredDate),
       );
       if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = FieldMessages.friendly(error.toString()));
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
+  static String _dateOnly(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
+
   Future<void> _pickDate() async {
+    final now = DateTime.now();
+    // Tomorrow at the earliest: material cannot be required for today.
+    final first = now.add(const Duration(days: 1));
+    final initial = _requiredDate.isBefore(first) ? first : _requiredDate;
     final selected = await showDatePicker(
       context: context,
-      firstDate: DateTime.now().add(const Duration(days: 3)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDate: _requiredDate,
+      firstDate: first,
+      lastDate: now.add(const Duration(days: 365)),
+      initialDate: initial,
     );
     if (selected != null) setState(() => _requiredDate = selected);
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
-    child: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Create Material Request', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          const AppTextField(label: 'Project', hint: 'Riverside Apartments — Block C (#1)', readOnly: true),
-          const SizedBox(height: 12),
-          const AppTextField(label: 'Material', hint: 'OPC Cement (#1)', readOnly: true),
-          const SizedBox(height: 12),
-          AppTextField(label: 'Specification / Description', controller: _description, maxLines: 2),
-          const SizedBox(height: 12),
-          AppTextField(label: 'Unit', controller: _unit),
-          const SizedBox(height: 12),
-          AppTextField(label: 'Quantity', controller: _quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _priority,
-            decoration: const InputDecoration(labelText: 'Priority', border: OutlineInputBorder()),
-            items: const [
-              DropdownMenuItem(value: 'Low', child: Text('Low')),
-              DropdownMenuItem(value: 'Normal', child: Text('Normal')),
-              DropdownMenuItem(value: 'High', child: Text('High')),
-              DropdownMenuItem(value: 'Urgent', child: Text('Urgent')),
+  Widget build(BuildContext context) {
+    if (_loadingOptions) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 14),
+              Text('Loading projects and materials...'),
             ],
-            onChanged: (value) => setState(() => _priority = value ?? 'Normal'),
           ),
-          const SizedBox(height: 12),
-          AppTextField(label: 'Site Notes', controller: _siteNotes, maxLines: 2),
-          const SizedBox(height: 12),
-          AppTextField(label: 'Reason / Purpose', controller: _reason, maxLines: 2),
-          const SizedBox(height: 12),
-          AppTextField(
-            label: 'Request Date',
-            hint: _requestDate.toIso8601String().substring(0, 10),
-            readOnly: true,
-          ),
-          const SizedBox(height: 12),
-          AppTextField(
-            label: 'Required Date',
-            hint: _requiredDate.toIso8601String().substring(0, 10),
-            readOnly: true,
-            onTap: _pickDate,
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!, style: const TextStyle(color: Colors.red)),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Create Material Request', style: Theme.of(context).textTheme.titleLarge),
+            // The error sits directly under the title, not at the bottom of the
+            // sheet: on a phone the button and the failure message are often in
+            // different scroll positions, so an error the user must scroll to
+            // find reads as "nothing happened".
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB91C1C).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFB91C1C)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Color(0xFFB91C1C), size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          color: Color(0xFFB91C1C),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            DropdownButtonFormField<int>(
+              initialValue: _projectId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Project *', border: OutlineInputBorder()),
+              items: _projects
+                  .map((p) => DropdownMenuItem<int>(
+                        value: p['id'] as int?,
+                        child: Text(p['name']?.toString() ?? 'Project', overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: (value) => setState(() => _projectId = value),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              initialValue: _materialId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Material *', border: OutlineInputBorder()),
+              items: _materials
+                  .map((m) => DropdownMenuItem<int>(
+                        value: m['id'] as int?,
+                        child: Text(m['name']?.toString() ?? 'Material', overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: (value) {
+                final match = _materials.where((m) => m['id'] == value).firstOrNull;
+                if (match != null) _selectMaterial(match);
+              },
+            ),
+            const SizedBox(height: 12),
+            AppTextField(
+              label: 'Quantity *',
+              controller: _quantity,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              hint: _unit.isEmpty ? 'e.g. 500' : 'e.g. 500 $_unit',
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Required Date *'),
+              trailing: Text(FieldFormat.date(_requiredDate)),
+              onTap: _pickDate,
+            ),
+            const SizedBox(height: 6),
+            DropdownButtonFormField<String>(
+              initialValue: _priority,
+              decoration: const InputDecoration(labelText: 'Priority', border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'Low', child: Text('Low')),
+                DropdownMenuItem(value: 'Normal', child: Text('Normal')),
+                DropdownMenuItem(value: 'High', child: Text('High')),
+                DropdownMenuItem(value: 'Urgent', child: Text('Urgent')),
+              ],
+              onChanged: (value) => setState(() => _priority = value ?? 'Normal'),
+            ),
+            const SizedBox(height: 12),
+            AppTextField(
+              label: 'Justification *',
+              controller: _reason,
+              maxLines: 2,
+              hint: 'Why is this material needed?',
+            ),
+            const SizedBox(height: 12),
+            AppTextField(label: 'Site Notes', controller: _siteNotes, maxLines: 2),
+            const SizedBox(height: 18),
+            AppButton(
+              // Disabled while in flight so a double tap cannot create two
+              // material requests.
+              label: _submitting ? FieldMessages.submitting('request') : 'Submit Request',
+              expand: true,
+              onPressed: _submitting ? null : _submit,
+            ),
           ],
-          const SizedBox(height: 18),
-          AppButton(
-            label: _submitting ? 'Submitting…' : 'Submit Request',
-            expand: true,
-            onPressed: _submitting ? null : _submit,
-          ),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

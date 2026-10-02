@@ -8,6 +8,16 @@ import '../services/operations_service.dart';
 ///
 /// The same three metric keys are chosen per role from the backend's
 /// `/dashboard` response, so mobile and web show the same headline numbers.
+///
+/// **Not routed in the Flutter shell.** The mobile home is now
+/// `FieldWorkspaceScreen`, which answers "what do I need to do now?" for each
+/// of the three field roles instead of mirroring the web dashboard's
+/// cross-department metric grid. Kept as the mobile-side reference for the
+/// `/dashboard` contract.
+///
+/// Its copy still describes procurement and administration roles, which is
+/// correct for this screen but is exactly why the field workspace replaced it:
+/// a Site Engineer has no business seeing procurement or admin metrics.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.roles = const [], this.service});
 

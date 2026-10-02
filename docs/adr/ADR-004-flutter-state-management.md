@@ -10,7 +10,7 @@
 BuildWise's Flutter application runs on Android (primary submission target: APK) and optionally on Windows desktop and Chrome (web). It must:
 
 1. Authenticate against the BuildWise ASP.NET Core API and store the JWT securely on-device.
-2. Navigate role-conditionally to feature areas (procurement, deliveries, quality, supplier portal, operations).
+2. Navigate role-conditionally to field feature areas. The mobile app is a **field operations tool for three roles** — Site Engineer (material requests), Site Officer (delivery receiving) and Quality Inspector (inspections, NCRs). Procurement, management and administration run on the React web app. Suppliers are external stakeholders contacted by email and have no mobile surface at all.
 3. Display live procurement workflow status with **local push notifications** when status changes (device feature — spec §9.2).
 4. Support login → authenticated workflow → logout without leaking tokens.
 

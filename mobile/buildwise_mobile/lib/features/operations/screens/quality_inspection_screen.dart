@@ -446,17 +446,12 @@ class _InspectionFormState extends State<_InspectionForm> {
   final _reason = TextEditingController(text: 'Water damage');
   final _criteria = TextEditingController(text: 'Visual check for damage, moisture, and packaging integrity');
   final _observed = TextEditingController(text: 'Material is partially usable; damaged units require segregation');
-  final _notes = TextEditingController(text: 'Photographic evidence to be attached before NCR review');
+  final _notes = TextEditingController(text: 'Photographic evidence captured on site');
   final _evidenceUrl = TextEditingController();
+  EvidencePhoto? _evidencePhoto;
   bool _submitting = false;
   String? _error;
 
-  /// The five-point checklist, in display order: label then key.
-  ///
-  /// Every point is always sent with a definite value, because the backend
-  /// rejects a completion that omits one. Defaults are Pass, so the inspector
-  /// only has to act on what actually failed — but the section is always
-  /// rendered, so a criterion can never be silently skipped.
   static const List<(String, String)> _checkPoints = [
     ('Quantity', 'quantity'),
     ('Visual condition', 'visual'),
@@ -472,6 +467,22 @@ class _InspectionFormState extends State<_InspectionForm> {
     'packaging': true,
     'defects': true,
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _syncAccepted();
+  }
+
+  void _syncAccepted() {
+    final inspected = double.tryParse(_inspected.text) ?? 0.0;
+    final rejected = double.tryParse(_rejected.text) ?? 0.0;
+    final calculated = (inspected - rejected).clamp(0.0, inspected);
+    final text = calculated % 1 == 0 ? calculated.toInt().toString() : calculated.toString();
+    if (_accepted.text != text) {
+      _accepted.text = text;
+    }
+  }
 
   @override
   void dispose() {
@@ -490,22 +501,48 @@ class _InspectionFormState extends State<_InspectionForm> {
     final inspected = double.tryParse(_inspected.text) ?? -1;
     final accepted = double.tryParse(_accepted.text) ?? -1;
     final rejected = double.tryParse(_rejected.text) ?? -1;
-    if (inspected < 0 || accepted < 0 || rejected < 0 || accepted + rejected != inspected) {
-      setState(() => _error = 'Accepted + Rejected must exactly equal Inspected; values cannot be negative.');
+
+    if (inspected <= 0 || accepted < 0 || rejected < 0 || (accepted + rejected != inspected)) {
+      setState(() => _error = 'Inspected must be positive, and Accepted + Rejected must exactly equal Inspected.');
       return;
     }
-    if (rejected > 0 && _reason.text.trim().isEmpty) {
-      setState(() => _error = 'A rejection reason is required.');
+
+    final hasChecklistFailure = _checks.values.any((pass) => !pass);
+    if ((rejected > 0 || hasChecklistFailure) && _reason.text.trim().isEmpty) {
+      setState(() => _error = 'A rejection reason is required when material is rejected or a checklist item fails.');
       return;
     }
+
     final items = widget.delivery['items'] as List<dynamic>? ?? const [];
     if (items.isEmpty) {
       setState(() => _error = 'The selected delivery has no item lines.');
       return;
     }
     final first = items.first as Map<String, dynamic>;
-    setState(() { _submitting = true; _error = null; });
+    final receivedQty = (first['receivedQuantity'] as num?)?.toDouble() ?? 0.0;
+    if (receivedQty > 0 && inspected > receivedQty) {
+      setState(() => _error = 'Inspected quantity ($inspected) cannot exceed received quantity ($receivedQty).');
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
     try {
+      final evidenceList = <Map<String, dynamic>>[];
+      if (_evidencePhoto != null) {
+        evidenceList.add(_evidencePhoto!.toPayload());
+      } else if (_evidenceUrl.text.trim().isNotEmpty) {
+        evidenceList.add({
+          'fileName': 'inspection-evidence.jpg',
+          'fileUrl': _evidenceUrl.text.trim(),
+          'contentType': 'image/jpeg',
+          'fileSizeBytes': 102400,
+        });
+      }
+
       await widget.service.createInspection(
         deliveryId: (widget.delivery['id'] as num).toInt(),
         materialId: (first['materialId'] as num?)?.toInt() ?? 1,
@@ -521,13 +558,9 @@ class _InspectionFormState extends State<_InspectionForm> {
         moistureCheck: _checks['moisture']!,
         packagingCheck: _checks['packaging']!,
         defectsCheck: _checks['defects']!,
-        evidence: _evidenceUrl.text.trim().isEmpty ? const [] : [{
-          'fileName': 'inspection-evidence.jpg',
-          'fileUrl': _evidenceUrl.text.trim(),
-          'contentType': 'image/jpeg',
-          'fileSizeBytes': 0,
-        }],
+        evidence: evidenceList,
       );
+
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
         await NotificationService.instance.showQualityUpdate(
@@ -540,7 +573,7 @@ class _InspectionFormState extends State<_InspectionForm> {
         await widget.onSaved();
       }
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -548,48 +581,112 @@ class _InspectionFormState extends State<_InspectionForm> {
 
   @override
   Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      AppTextField(label: 'Inspected Quantity', controller: _inspected, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+      Row(
+        children: [
+          Expanded(
+            child: AppTextField(
+              label: 'Inspected Quantity',
+              controller: _inspected,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(_syncAccepted),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: AppTextField(
+              label: 'Rejected Quantity',
+              controller: _rejected,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(_syncAccepted),
+            ),
+          ),
+        ],
+      ),
       const SizedBox(height: 10),
-      AppTextField(label: 'Accepted Quantity', controller: _accepted, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-      const SizedBox(height: 10),
-      AppTextField(label: 'Rejected Quantity', controller: _rejected, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+      AppTextField(
+        label: 'Accepted Quantity (Auto-calculated)',
+        controller: _accepted,
+        readOnly: true,
+      ),
       const SizedBox(height: 14),
-      // The five-point checklist. Always rendered, always sent: the backend
-      // rejects a completion missing any point, and hiding this section would
-      // let an inspector submit an inspection that states nothing about
-      // moisture or packaging.
-      Text('Quality checklist', style: Theme.of(context).textTheme.titleSmall),
+      Text('5-Point Quality Checklist', style: Theme.of(context).textTheme.titleSmall),
       const SizedBox(height: 4),
       Text(
-        'Pass / Fail for each criterion. Every point must be recorded.',
+        'Pass / Fail for each criterion. Every point must be explicitly evaluated.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      const SizedBox(height: 4),
+      const SizedBox(height: 6),
       for (final (label, key) in _checkPoints)
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(label),
-          subtitle: Text(_checks[key]! ? 'Pass' : 'Fail'),
-          value: _checks[key]!,
-          activeThumbColor: _checks[key]! ? Colors.green.shade700 : Colors.red.shade700,
-          onChanged: (value) => setState(() => _checks[key] = value),
+        Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: _checks[key]! ? Colors.green.shade50 : Colors.red.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: _checks[key]! ? Colors.green.shade200 : Colors.red.shade200),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: _checks[key]! ? Colors.green.shade900 : Colors.red.shade900,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _checks[key]! ? 'PASS' : 'FAIL',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: _checks[key]! ? Colors.green.shade700 : Colors.red.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Switch(
+                    value: _checks[key]!,
+                    activeColor: Colors.green.shade700,
+                    inactiveThumbColor: Colors.red.shade700,
+                    onChanged: (value) => setState(() => _checks[key] = value),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       const SizedBox(height: 10),
-      AppTextField(label: 'Rejection Reason', controller: _reason, maxLines: 2),
+      AppTextField(label: 'Rejection Reason (Required if rejected/failed)', controller: _reason, maxLines: 2),
       const SizedBox(height: 10),
       AppTextField(label: 'Inspection Criteria', controller: _criteria, maxLines: 2),
       const SizedBox(height: 10),
       AppTextField(label: 'Observed Result', controller: _observed, maxLines: 2),
       const SizedBox(height: 10),
       AppTextField(label: 'Notes', controller: _notes, maxLines: 2),
-      const SizedBox(height: 10),
-      AppTextField(label: 'Evidence URL (optional)', controller: _evidenceUrl, keyboardType: TextInputType.url),
+      const SizedBox(height: 14),
+      EvidencePickerWidget(
+        title: 'Inspection Photo Evidence',
+        subtitle: 'Capture damaged bags, packaging tears, or site test certificate.',
+        onChanged: (photo) => setState(() => _evidencePhoto = photo),
+      ),
+      if (_evidencePhoto == null) ...[
+        const SizedBox(height: 8),
+        AppTextField(
+          label: 'Or Evidence URL (optional)',
+          controller: _evidenceUrl,
+          keyboardType: TextInputType.url,
+        ),
+      ],
       if (_error != null) ...[
         const SizedBox(height: 10),
-        Text(_error!, style: const TextStyle(color: Colors.red)),
+        Text(_error!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
       ],
-      const SizedBox(height: 14),
+      const SizedBox(height: 16),
       AppButton(
         label: _submitting ? 'Submitting…' : 'Submit Inspection',
         expand: true,

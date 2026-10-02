@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import {
   Button,
   Card,
@@ -40,7 +40,7 @@ export default function DeliveriesPage() {
   const [isRecordOpen, setIsRecordOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const canReceive = hasRole('SiteOfficer') || hasRole('ReceivingOfficer') || hasRole('Administrator')
+  const canReceive = hasRole('SiteOfficer') || hasRole('Administrator')
 
   async function loadWorkspace() {
     setLoading(true)
@@ -74,7 +74,7 @@ export default function DeliveriesPage() {
   function openDetail(id) { setSelectedId(id) }
   function closeDetail() { setSelectedId(null) }
 
-  if (loading) return <LoadingState message="Loading deliveries…" />
+  if (loading) return <LoadingState message="Loading deliveriesâ€¦" />
   if (error) return <ErrorState title="Could not load deliveries" message={error} onRetry={loadWorkspace} />
 
   return (
@@ -261,7 +261,7 @@ function ReceiveDeliveryForm({ orders, userName, onRecorded }) {
       <form onSubmit={handleSubmit} className="delivery-form">
         <Card>
           <div className="form-grid">
-            <SelectInput label="Confirmed purchase order" id="purchaseOrderId" required value={form.purchaseOrderId} onChange={(e) => update('purchaseOrderId', e.target.value)} options={[{ value: '', label: 'Select a purchase order' }, ...orders.map((po) => ({ value: po.id, label: `PO-${po.id} · ${po.items?.length ?? 0} line(s)` }))]} />
+            <SelectInput label="Confirmed purchase order" id="purchaseOrderId" required value={form.purchaseOrderId} onChange={(e) => update('purchaseOrderId', e.target.value)} options={[{ value: '', label: 'Select a purchase order' }, ...orders.map((po) => ({ value: po.id, label: `PO-${po.id} Â· ${po.items?.length ?? 0} line(s)` }))]} />
             <TextInput label="Delivery reference / invoice" id="deliveryReference" required value={form.deliveryReference} onChange={(e) => update('deliveryReference', e.target.value)} placeholder="e.g. INV-9081" />
           </div>
         </Card>
@@ -280,7 +280,7 @@ function ReceiveDeliveryForm({ orders, userName, onRecorded }) {
           {/* The form is no longer a separate view, so "Cancel" used to mean
               "leave this tab". It now clears the in-progress draft, which is
               what the button still means to someone filling the form in. */}
-          <div className="form-actions"><Button variant="secondary" onClick={() => { setForm(EMPTY_FORM); setLines({}); setSubmitError(null) }} disabled={submitting}>Clear form</Button><Button type="submit" disabled={submitting || !selectedOrder}>{submitting ? 'Recording…' : 'Submit delivery entry'}</Button></div>
+          <div className="form-actions"><Button variant="secondary" onClick={() => { setForm(EMPTY_FORM); setLines({}); setSubmitError(null) }} disabled={submitting}>Clear form</Button><Button type="submit" disabled={submitting || !selectedOrder}>{submitting ? 'Recordingâ€¦' : 'Submit delivery entry'}</Button></div>
         </Card>
       </form>
     </section>
@@ -349,7 +349,7 @@ function DeliveryDetail({ delivery }) {
             <div className="detail-row">
               <span>Over-receipt</span>
               <StatusBadge status="danger">
-                {formatNumber(overReceipt)} more than ordered — this record predates quantity validation
+                {formatNumber(overReceipt)} more than ordered â€” this record predates quantity validation
               </StatusBadge>
             </div>
           )}
@@ -357,16 +357,16 @@ function DeliveryDetail({ delivery }) {
         <Card title="Activity & history" subtitle="Traceable delivery timeline">
           <ul className="activity-list">
             <li className="activity-item"><span className="activity-dot" /><div><strong>Delivery recorded</strong><div className="activity-time">{formatDate(delivery.deliveredAt, true)}</div></div></li>
-            <li className="activity-item"><span className="activity-dot" /><div><strong>Discrepancy analysis {analysis ? 'completed' : 'not yet run in this session'}</strong><div className="activity-time">{analysis ? `${analysis.agent} · ${analysis.tool}` : 'Run the AI Delivery Risk Analysis below to see the agent result'}</div></div></li>
+            <li className="activity-item"><span className="activity-dot" /><div><strong>Discrepancy analysis {analysis ? 'completed' : 'not yet run in this session'}</strong><div className="activity-time">{analysis ? `${analysis.agent} Â· ${analysis.tool}` : 'Run the AI Delivery Risk Analysis below to see the agent result'}</div></div></li>
             <li className="activity-item"><span className="activity-dot" /><div><strong>Status set to {titleCase(delivery.status)}</strong><div className="activity-time">Based on ordered, received, and damaged quantities</div></div></li>
           </ul>
           <div className="detail-items">
             <h3>Line items</h3>
-            {delivery.items?.map((item) => <div className="detail-line" key={item.id ?? item.materialId}><div><strong>{item.materialName ?? `Material #${item.materialId}`}</strong><small>Received {formatNumber(item.receivedQuantity)} · damaged {formatNumber(item.damagedQuantity)}</small></div><StatusBadge status={Number(item.damagedQuantity) > 0 ? 'warning' : 'success'}>{Number(item.damagedQuantity) > 0 ? 'Review' : 'Matched'}</StatusBadge></div>)}
+            {delivery.items?.map((item) => <div className="detail-line" key={item.id ?? item.materialId}><div><strong>{item.materialName ?? `Material #${item.materialId}`}</strong><small>Received {formatNumber(item.receivedQuantity)} Â· damaged {formatNumber(item.damagedQuantity)}</small></div><StatusBadge status={Number(item.damagedQuantity) > 0 ? 'warning' : 'success'}>{Number(item.damagedQuantity) > 0 ? 'Review' : 'Matched'}</StatusBadge></div>)}
           </div>
         </Card>
       </div>
-      {/* COMPONENT 3 — AI Delivery Risk Analysis.
+      {/* COMPONENT 3 â€” AI Delivery Risk Analysis.
           This is the real DeliveryDiscrepancyAgent (:8003) result, surfaced so
           the agent contribution is demonstrable rather than asserted in copy.
           Advisory only: it never changes the recorded delivery status. */}
@@ -376,7 +376,7 @@ function DeliveryDetail({ delivery }) {
       >
         <div className="form-actions">
           <Button variant="secondary" onClick={runDiscrepancyAnalysis} disabled={analyzing}>
-            {analyzing ? 'Analyzing…' : analysis ? 'Re-run Analysis' : 'Run Delivery Analysis'}
+            {analyzing ? 'Analyzingâ€¦' : analysis ? 'Re-run Analysis' : 'Run Delivery Analysis'}
           </Button>
         </div>
 
@@ -422,4 +422,5 @@ function DeliveryDetail({ delivery }) {
     </section>
   )
 }
+
 

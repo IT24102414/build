@@ -178,73 +178,326 @@ class _ReceiveForm extends StatefulWidget {
 
 class _ReceiveFormState extends State<_ReceiveForm> {
   final _reference = TextEditingController(text: 'INV-9081');
-  final _received = TextEditingController(text: '240');
-  final _damaged = TextEditingController(text: '5');
+  final Map<int, TextEditingController> _receivedControllers = {};
+  final Map<int, TextEditingController> _damagedControllers = {};
+
+  /// The immutable facts of each PO line (ordered quantity, material, unit),
+  /// keyed by line id. The text fields hold what the officer *entered*; this
+  /// holds what was *ordered*, so the shortage can be derived rather than typed.
+  final Map<int, _OrderLine> _lines = {};
+
+  EvidencePhoto? _evidencePhoto;
   bool _submitting = false;
   String? _error;
+
+  /// Ordered minus received, floored at zero. An over-delivery is not a
+  /// negative shortage — it is rejected outright by [_validateLines].
+  double _shortageFor(_OrderLine line) {
+    final received =
+        double.tryParse(_receivedControllers[line.id]?.text.trim() ?? '') ?? 0;
+    final shortage = line.ordered - received;
+    return shortage > 0 ? shortage : 0;
+  }
+
+  /// Trims trailing zeros so "10" never renders as "10.0".
+  static String _fmt(double value) =>
+      value % 1 == 0 ? value.toInt().toString() : value.toString();
+
+  void _refreshLine(int id) {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _initControllers();
+  }
+
+  @override
+  void didUpdateWidget(_ReceiveForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.order['id'] != widget.order['id']) {
+      _disposeControllers();
+      _initControllers();
+    }
+  }
+
+  void _initControllers() {
+    final items = (widget.order['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    _lines.clear();
+    for (final item in items) {
+      final id = (item['id'] as num?)?.toInt() ?? (item['materialId'] as num?)?.toInt() ?? 0;
+      final ordered = (item['orderedQuantity'] as num?)?.toDouble() ?? 0.0;
+      _lines[id] = _OrderLine(
+        id: id,
+        ordered: ordered,
+        materialName: item['materialName']?.toString() ?? 'Item',
+        unit: item['materialUnit']?.toString() ??
+            item['unit']?.toString() ??
+            'units',
+      );
+      _receivedControllers[id] = TextEditingController(
+        text: ordered > 0 ? (ordered % 1 == 0 ? ordered.toInt().toString() : ordered.toString()) : '0',
+      );
+      _damagedControllers[id] = TextEditingController(text: '0');
+    }
+  }
+
+  void _disposeControllers() {
+    for (final c in _receivedControllers.values) {
+      c.dispose();
+    }
+    for (final c in _damagedControllers.values) {
+      c.dispose();
+    }
+    _receivedControllers.clear();
+    _damagedControllers.clear();
+  }
 
   @override
   void dispose() {
     _reference.dispose();
-    _received.dispose();
-    _damaged.dispose();
+    _disposeControllers();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    final received = double.tryParse(_received.text) ?? -1;
-    final damaged = double.tryParse(_damaged.text) ?? -1;
-    final items = widget.order['items'] as List<dynamic>? ?? const [];
-    if (items.isEmpty || _reference.text.trim().isEmpty) {
-      setState(() => _error = 'Select a PO with line items and enter a delivery reference.');
+    final ref = _reference.text.trim();
+    if (ref.isEmpty) {
+      setState(() => _error = 'Please enter a delivery reference or invoice number.');
       return;
     }
-    if (received < 0 || damaged < 0 || damaged > received) {
-      setState(() => _error = 'Quantities cannot be negative and damaged cannot exceed received.');
+
+    final rawItems = (widget.order['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    if (rawItems.isEmpty) {
+      setState(() => _error = 'The selected Purchase Order has no line items.');
       return;
     }
-    final first = items.first as Map<String, dynamic>;
-    setState(() { _submitting = true; _error = null; });
+
+    final payloadItems = <Map<String, dynamic>>[];
+    for (final item in rawItems) {
+      final id = (item['id'] as num?)?.toInt() ?? (item['materialId'] as num?)?.toInt() ?? 0;
+      final materialId = (item['materialId'] as num?)?.toInt() ?? id;
+      final ordered = (item['orderedQuantity'] as num?)?.toDouble() ?? 0.0;
+      final matName = item['materialName']?.toString() ?? 'Item';
+
+      final rText = _receivedControllers[id]?.text.trim() ?? '';
+      final dText = _damagedControllers[id]?.text.trim() ?? '';
+      final received = double.tryParse(rText) ?? -1;
+      final damaged = double.tryParse(dText) ?? -1;
+
+      if (received < 0 || damaged < 0) {
+        setState(() => _error = 'Invalid quantities for $matName. Quantities cannot be negative.');
+        return;
+      }
+      if (damaged > received) {
+        setState(() => _error = 'Damaged quantity cannot exceed received quantity for $matName.');
+        return;
+      }
+      if (ordered > 0 && received > ordered) {
+        setState(() => _error = 'Received quantity ($received) exceeds ordered quantity ($ordered) for $matName.');
+        return;
+      }
+
+      payloadItems.add({
+        'materialId': materialId,
+        'receivedQuantity': received,
+        'damagedQuantity': damaged,
+      });
+    }
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+
     try {
+      final evidenceList = _evidencePhoto != null ? [_evidencePhoto!.toPayload()] : const <Map<String, dynamic>>[];
       await widget.service.recordDelivery(
         purchaseOrderId: (widget.order['id'] as num).toInt(),
-        reference: _reference.text.trim(),
-        materialId: (first['materialId'] as num?)?.toInt() ?? 1,
-        received: received,
-        damaged: damaged,
+        reference: ref,
+        items: payloadItems,
+        evidence: evidenceList,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Delivery recorded. Discrepancy status saved by the API.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delivery recorded successfully with item lines and discrepancy check.')),
+        );
         await widget.onSaved();
       }
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text('PO-${widget.order['id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-      const SizedBox(height: 12),
-      AppTextField(label: 'Delivery Reference / Invoice', controller: _reference),
-      const SizedBox(height: 12),
-      AppTextField(label: 'Received Quantity', controller: _received, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-      const SizedBox(height: 12),
-      AppTextField(label: 'Damaged Quantity', controller: _damaged, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
-      if (_error != null) ...[
+  Widget build(BuildContext context) {
+    final rawItems = (widget.order['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    final supplier = widget.order['supplierName']?.toString() ?? 'Supplier';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('PO-${widget.order['id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            StatusChip(label: supplier, tone: StatusTone.info),
+          ],
+        ),
+        const SizedBox(height: 12),
+        AppTextField(label: 'Delivery Reference / Invoice', controller: _reference),
+        const SizedBox(height: 16),
+        Text('Order Line Items', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          'Enter received and damaged quantities for every line item.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
         const SizedBox(height: 10),
-        Text(_error!, style: const TextStyle(color: Colors.red)),
+        if (rawItems.isEmpty)
+          const Text('No line items found in this purchase order.')
+        else
+          ...rawItems.map((item) {
+            final id = (item['id'] as num?)?.toInt() ?? (item['materialId'] as num?)?.toInt() ?? 0;
+            final matName = item['materialName']?.toString() ?? 'Material #${item['materialId']}';
+            final ordered = item['orderedQuantity']?.toString() ?? '0';
+            // Prefer the unit captured with the line facts, so the "Ordered",
+            // the input labels and the derived shortage all agree.
+            final unit = _lines[id]?.unit ?? item['unit']?.toString() ?? 'units';
+            final rCtrl = _receivedControllers[id];
+            final dCtrl = _damagedControllers[id];
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          matName,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                      Text(
+                        'Ordered: $ordered $unit',
+                        style: TextStyle(color: Colors.blueGrey.shade700, fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: rCtrl == null
+                            ? const SizedBox.shrink()
+                            : AppTextField(
+                                label: 'Received ($unit)',
+                                controller: rCtrl,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                onChanged: (_) => _refreshLine(id),
+                              ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: dCtrl == null
+                            ? const SizedBox.shrink()
+                            : AppTextField(
+                                label: 'Damaged ($unit)',
+                                controller: dCtrl,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                onChanged: (_) => _refreshLine(id),
+                              ),
+                      ),
+                    ],
+                  ),
+                  // Shortage is derived, never typed: Ordered - Received.
+                  // Recomputed on every keystroke so the officer sees the
+                  // consequence of what they entered immediately.
+                  Builder(
+                    builder: (context) {
+                      final line = _lines[id];
+                      if (line == null) return const SizedBox.shrink();
+                      final shortage = _shortageFor(line);
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              shortage > 0
+                                  ? Icons.error_outline
+                                  : Icons.check_circle_outline,
+                              size: 16,
+                              color: shortage > 0
+                                  ? Colors.red.shade700
+                                  : Colors.green.shade700,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Shortage: ${_fmt(shortage)} $unit',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: shortage > 0
+                                    ? Colors.red.shade700
+                                    : Colors.green.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            );
+          }),
+        const SizedBox(height: 12),
+        EvidencePickerWidget(
+          title: 'Delivery Photo Evidence',
+          subtitle: 'Attach delivery note, consignment photo, or damaged material picture.',
+          onChanged: (photo) => setState(() => _evidencePhoto = photo),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Text(_error!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+        ],
+        const SizedBox(height: 18),
+        AppButton(
+          label: _submitting ? 'Recording…' : 'Submit Receiving',
+          expand: true,
+          onPressed: _submitting ? null : _submit,
+        ),
       ],
-      const SizedBox(height: 16),
-      AppButton(
-        label: _submitting ? 'Recording…' : 'Submit Receiving',
-        expand: true,
-        onPressed: _submitting ? null : _submit,
-      ),
-    ],
-  );
+    );
+  }
+}
+/// The immutable facts of one purchase-order line, as returned by
+/// `GET /api/deliveries/confirmed-orders`.
+///
+/// The officer's entered values live in text controllers; this holds what was
+/// *ordered*, which is what the shortage is measured against.
+class _OrderLine {
+  const _OrderLine({
+    required this.id,
+    required this.ordered,
+    required this.materialName,
+    required this.unit,
+  });
+
+  final int id;
+  final double ordered;
+  final String materialName;
+  final String unit;
 }

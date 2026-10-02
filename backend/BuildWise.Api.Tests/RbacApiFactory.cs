@@ -75,7 +75,11 @@ public class RbacApiFactory : WebApplicationFactory<Program>
         return db;
     }
 
-    /// <summary>Builds a client authenticated as the given roles.</summary>
+    /// <summary>
+    /// Builds a client authenticated with the given roles. Used both for real
+    /// internal roles and to prove a legacy <c>Supplier</c> token is refused
+    /// everywhere — suppliers are external stakeholders with no account.
+    /// </summary>
     public HttpClient CreateClientFor(params string[] roles) => CreateClientForUser(1, roles);
 
     /// <summary>
@@ -86,23 +90,11 @@ public class RbacApiFactory : WebApplicationFactory<Program>
     {
         var client = CreateClient();
         client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", BuildToken(roles, null, userId));
+            new AuthenticationHeaderValue("Bearer", BuildToken(roles, userId));
         return client;
     }
 
-    /// <summary>
-    /// Builds a client for a supplier portal user, signing the supplier id into
-    /// the token exactly as <c>JwtTokenService</c> does in production.
-    /// </summary>
-    public HttpClient CreateSupplierClient(int supplierId)
-    {
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", BuildToken(new[] { "Supplier" }, supplierId));
-        return client;
-    }
-
-    private string BuildToken(string[] roles, int? supplierId = null, int userId = 1)
+    private string BuildToken(string[] roles, int userId = 1)
     {
         var claims = new List<Claim>
         {
@@ -112,7 +104,6 @@ public class RbacApiFactory : WebApplicationFactory<Program>
             new(ClaimTypes.Email, "rbac.tester@buildwise.test")
         };
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
-        if (supplierId is > 0) claims.Add(new Claim("supplier_id", supplierId.Value.ToString()));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtKey));
         var token = new JwtSecurityToken(

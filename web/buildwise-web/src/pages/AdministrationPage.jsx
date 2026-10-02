@@ -11,7 +11,6 @@ const AVAILABLE_ROLES = [
   { value: 'ProcurementManager', label: 'Procurement Manager (AI Recommendations & POs)' },
   { value: 'QualityInspector', label: 'Quality Inspector (Inspections & NCRs)' },
   { value: 'Administrator', label: 'Administrator (System & User Management)' },
-  { value: 'Supplier', label: 'Supplier (External Quotation Portal)' },
 ]
 
 const INITIAL_USER_FORM = {
@@ -231,7 +230,7 @@ export default function AdministrationPage() {
       <Drawer
         open={isAddUserOpen}
         title="Provision New User"
-        subtitle="Create an internal staff or supplier account and dispatch welcome login credentials via email."
+        subtitle="Create an internal staff account and dispatch welcome login credentials via email."
         onClose={() => setIsAddUserOpen(false)}
       >
         <form onSubmit={handleCreateUser} className="stack" style={{ gap: '1.25rem' }}>

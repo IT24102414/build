@@ -2,6 +2,7 @@ using System.Net;
 using BuildWise.Api.Models.Entities;
 using BuildWise.Api.Models.Enums;
 using BuildWise.Api.Security;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace BuildWise.Api.Tests;
@@ -81,20 +82,16 @@ public class RbacAuthorizationTests : IClassFixture<RbacApiFactory>
 
         // --- Deliveries ---------------------------------------------------
         { "POST",   "/api/deliveries",                               "ProcurementOfficer" },
-        { "GET",    "/api/deliveries/confirmed-orders",              "Supplier" },
-        { "GET",    "/api/deliveries/expected",                      "Supplier" },
 
-        // --- Shared internal surfaces: closed to the supplier portal -----
+        // --- Shared internal surfaces: a supplier reaches none of them ------
+        // A supplier is an external stakeholder with no account, so a token
+        // carrying the legacy role must be rejected by every internal policy.
         { "GET",    "/api/dashboard",                                "Supplier" },
         { "GET",    "/api/notifications",                            "Supplier" },
         { "GET",    "/api/materials",                                "Supplier" },
         { "GET",    "/api/projects",                                 "Supplier" },
-
-        // --- Supplier portal: closed to every internal role --------------
-        { "GET",    "/api/supplier-portal/profile",                  "ProcurementOfficer" },
-        { "GET",    "/api/supplier-portal/rfqs",                     "QualityInspector" },
-        { "POST",   "/api/supplier-portal/rfqs/1/quotations",        "SiteEngineer" },
-        { "GET",    "/api/supplier-portal/purchase-orders",          "ProcurementManager" },
+        { "GET",    "/api/deliveries/confirmed-orders",              "Supplier" },
+        { "GET",    "/api/deliveries/expected",                      "Supplier" },
     };
     [Theory]
     [MemberData(nameof(ForbiddenEndpoints))]
@@ -148,21 +145,49 @@ public class RbacAuthorizationTests : IClassFixture<RbacApiFactory>
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    /// <summary>
+    /// A supplier is an external stakeholder, not a BuildWise user. The former
+    /// <c>/api/supplier-portal/*</c> surface no longer exists, so a token
+    /// carrying the legacy <c>Supplier</c> role must reach nothing at all.
+    /// </summary>
     [Theory]
-    [InlineData(Roles.Administrator)]
-    [InlineData(Roles.SiteEngineer)]
-    [InlineData(Roles.SiteOfficer)]
-    [InlineData(Roles.ReceivingOfficer)]
-    [InlineData(Roles.QualityInspector)]
-    [InlineData(Roles.SiteManager)]
-    [InlineData(Roles.ProjectManager)]
-    public async Task Supplier_portal_is_closed_to_every_internal_role(string role)
+    [InlineData("/api/supplier-portal/profile")]
+    [InlineData("/api/supplier-portal/rfqs")]
+    [InlineData("/api/supplier-portal/quotations")]
+    [InlineData("/api/supplier-portal/purchase-orders")]
+    [InlineData("/api/suppliers")]
+    [InlineData("/api/rfqs")]
+    [InlineData("/api/dashboard")]
+    public async Task Legacy_supplier_role_is_refused_by_every_endpoint(string path)
     {
-        using var client = _factory.CreateClientFor(role);
+        using var client = _factory.CreateClientFor("Supplier");
 
-        using var response = await client.GetAsync("/api/supplier-portal/profile");
+        using var response = await client.GetAsync(path);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        // Either the endpoint exists and its policy excludes Supplier (403), or
+        // the supplier portal route was removed entirely (404). What must never
+        // happen is a supplier token reading internal or business data (200).
+        Assert.True(
+            response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound,
+            $"Supplier token reached {path} with {(int)response.StatusCode}.");
+    }
+
+    /// <summary>
+    /// The supplier portal was removed outright, so its routes must not resolve
+    /// to a controller at all — not merely be forbidden for the right role.
+    /// </summary>
+    [Theory]
+    [InlineData("/api/supplier-portal/profile")]
+    [InlineData("/api/supplier-portal/rfqs")]
+    [InlineData("/api/supplier-portal/purchase-orders")]
+    public async Task Supplier_portal_routes_no_longer_exist(string path)
+    {
+        using var client = _factory.CreateClientFor("ProcurementOfficer");
+
+        using var response = await client.GetAsync(path);
+
+        // No controller matches the route, so the pipeline never authorizes it.
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Theory]
@@ -282,30 +307,22 @@ public class RbacAuthorizationTests : IClassFixture<RbacApiFactory>
     }
 
     [Fact]
-    public async Task Internal_surfaces_are_closed_to_a_supplier_portal_token()
+    public async Task A_supplier_cannot_authenticate_at_all()
     {
-        // Even a correctly-bound supplier token must not reach internal data.
-        using var client = _factory.CreateSupplierClient(supplierId: 1);
+        // There is no supplier account to authenticate as: the seeder creates
+        // logins only for internal staff, and the role is not seeded. Even a
+        // token forged with the legacy role is rejected by every internal policy.
+        var db = await _factory.GetSeededDbAsync();
 
-        foreach (var path in new[]
-                 {
-                     "/api/suppliers",
-                     "/api/purchase-orders",
-                     "/api/rfqs",
-                     "/api/agent-workflows",
-                     "/api/deliveries",
-                     "/api/dashboard",
-                     "/api/notifications",
-                     "/api/materials",
-                     "/api/projects",
-                     "/api/admin/users"
-                 })
-        {
-            using var response = await client.GetAsync(path);
-            Assert.True(
-                response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound,
-                $"Supplier token reached {path} with {(int)response.StatusCode}.");
-        }
+        Assert.DoesNotContain(await db.Roles.Select(r => r.Name).ToListAsync(), name => name == "Supplier");
+
+        // No user row is bound to a supplier business record.
+        var supplier = new Supplier { Name = "External Supplier Co", Email = "sales@external.test" };
+        db.Suppliers.Add(supplier);
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await db.Users.ToListAsync());
+        Assert.Single(await db.Suppliers.ToListAsync());
     }
 
     private static HttpRequestMessage BuildRequest(string method, string path)

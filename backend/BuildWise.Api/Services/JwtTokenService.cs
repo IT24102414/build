@@ -39,13 +39,9 @@ public class JwtTokenService
         };
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
-        // Supplier portal scoping. Signing the supplier id into the token means
-        // supplier-scoped endpoints filter on a server-verified value, so a
-        // supplier can never widen its scope by editing a request body or query.
-        if (user.SupplierId is > 0)
-        {
-            claims.Add(new Claim(CallerScope.SupplierIdClaim, user.SupplierId.Value.ToString()));
-        }
+        // Suppliers are external stakeholders with no BuildWise account, so no
+        // token ever carries a supplier identity. Every claim above identifies
+        // an internal staff user.
 
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);

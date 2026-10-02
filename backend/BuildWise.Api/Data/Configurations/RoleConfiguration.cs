@@ -19,21 +19,17 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.HasIndex(r => r.Name).IsUnique();
 
         builder.HasData(
+            // The seven internal roles. SiteOfficer owns delivery receiving and
+            // SiteManager owns material-request approval; the former
+            // ReceivingOfficer and ProjectManager aliases have been retired and
+            // are removed by the ConsolidateLegacyRoles migration.
             new Role { Id = 1, Name = "Administrator" },
             new Role { Id = 2, Name = "SiteEngineer" },
-            new Role { Id = 3, Name = "ProjectManager" },
             new Role { Id = 4, Name = "ProcurementOfficer" },
             new Role { Id = 5, Name = "ProcurementManager" },
-            new Role { Id = 6, Name = "ReceivingOfficer" },
             new Role { Id = 7, Name = "QualityInspector" },
-            // Aliases required by the role-based access matrix and frontend shells:
-            // SiteOfficer ↔ SiteEngineer, SiteManager ↔ ProcurementManager.
             new Role { Id = 8, Name = "SiteOfficer" },
-            new Role { Id = 9, Name = "SiteManager" },
-            // External supplier portal user. Bound to exactly one supplier row via
-            // users.supplier_id, which the API reads from a signed JWT claim so a
-            // supplier can never read another supplier's RFQs or quotations.
-            new Role { Id = 10, Name = "Supplier" }
+            new Role { Id = 9, Name = "SiteManager" }
         );
     }
 }

@@ -1,7 +1,7 @@
 // Shared API transport helpers.
 //
-// Every client in the app (auth, procurement, quality, administration and the
-// supplier portal) previously did its own bare `fetch`. When the API was not
+// Every client in the app (auth, procurement, quality and administration)
+// previously did its own bare `fetch`. When the API was not
 // running, the browser surfaced the raw, unhelpful string "Failed to fetch" with
 // no hint about what to do. This module centralises the base URL, network-failure
 // detection, and a message that tells the user how to fix it.

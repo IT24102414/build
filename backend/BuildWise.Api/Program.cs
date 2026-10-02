@@ -159,25 +159,20 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(Policies.ProcurementStaffAndAdmin, policy =>
         policy.RequireRole(Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.SiteManager, Roles.Administrator));
 
-    // Internal staff surface. Supplier portal users are authenticated but must
-    // never reach procurement, supplier master data, or other suppliers' data.
+    // Internal staff surface. Suppliers are external stakeholders with no
+    // BuildWise account, so this is the complete set of roles that can sign in.
     options.AddPolicy(Policies.InternalStaffOnly, policy =>
         policy.RequireRole(
             Roles.SiteEngineer, Roles.SiteOfficer,
             Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.SiteManager,
-            Roles.ReceivingOfficer, Roles.QualityInspector,
-            Roles.ProjectManager, Roles.Administrator));
+            Roles.QualityInspector, Roles.Administrator));
 
     options.AddPolicy(Policies.DeliveryParticipantsOnly, policy =>
         policy.RequireRole(
             Roles.SiteEngineer, Roles.SiteOfficer,
-            Roles.ReceivingOfficer, Roles.QualityInspector,
+            Roles.QualityInspector,
             Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.SiteManager,
             Roles.Administrator));
-
-    // Supplier portal: a dedicated external role, never mixed with internal staff.
-    options.AddPolicy(Policies.SupplierPortalOnly, policy =>
-        policy.RequireRole(Roles.Supplier));
 });
 
 // CORS: permissive dev policy (covers React on localhost:5173 and Flutter/Chrome).

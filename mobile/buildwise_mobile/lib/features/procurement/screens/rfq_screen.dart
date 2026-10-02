@@ -7,6 +7,14 @@ import '../widgets/procurement_status_tone.dart';
 
 /// RFQ register — mirrors the web app's RFQs page.
 ///
+/// **Not routed in the Flutter shell.** The procurement desk runs on the web
+/// application: the officer selects supplier *contact records*, BuildWise emails
+/// the RFQ to them, and the quotations that come back by email are keyed in
+/// there. Suppliers are external parties and never log in, so there is no mobile
+/// surface for them and no reason to raise an RFQ from a site device. See
+/// `core/auth/buildwise_roles.dart` (`webOnly`) and
+/// `features/auth/screens/web_only_notice_screen.dart`.
+///
 /// An RFQ can only be raised against an **Approved** material request, and at
 /// least one active supplier must be invited, because the whole point is to open
 /// a quotation window with real suppliers.

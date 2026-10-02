@@ -11,9 +11,9 @@ namespace BuildWise.Api.Controllers;
 /// Reference-data endpoints: projects and materials.
 /// Used by React and Flutter dropdowns so forms do not hard-code seed values.
 /// <para>
-/// Gated to internal staff. Supplier portal users must not enumerate the
-/// project/material master data — they only ever see the lines on RFQs that
-/// were addressed to them, via <c>SupplierPortalController</c>.
+/// Gated to internal staff. Suppliers have no BuildWise account and reach this
+/// data through no endpoint at all — the Procurement Officer selects the
+/// supplier on their behalf when recording a quotation received by email.
 /// </para>
 /// </summary>
 [ApiController]

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text.Json;
 using BuildWise.Api.Data;
 using BuildWise.Api.DTOs;
@@ -12,14 +12,14 @@ using Xunit;
 namespace BuildWise.Api.Tests;
 
 /// <summary>
-/// Phase 2 — one complete, real C1 → C4 scenario, walking every actor in turn:
+/// Phase 2 â€” one complete, real C1 â†’ C4 scenario, walking every actor in turn:
 /// <code>
-/// Site Engineer → Material Request → Manager Approval → RFQ
-///   → Supplier quotation → AI analysis → Validation → Manager approval → PO
-///   → Site Officer receiving → Quality Inspector → NCR (rejected) → Resolution
+/// Site Engineer â†’ Material Request â†’ Manager Approval â†’ RFQ
+///   â†’ Supplier quotation â†’ AI analysis â†’ Validation â†’ Manager approval â†’ PO
+///   â†’ Site Officer receiving â†’ Quality Inspector â†’ NCR (rejected) â†’ Resolution
 /// </code>
-/// The earlier <see cref="ScenarioReplayTests"/> covered only C1 → C2
-/// (request → agent workflow → purchase order). Everything from receiving
+/// The earlier <see cref="ScenarioReplayTests"/> covered only C1 â†’ C2
+/// (request â†’ agent workflow â†’ purchase order). Everything from receiving
 /// onwards, and the supplier's own participation in quoting, had no coverage.
 /// <para>
 /// RBAC is asserted at every hand-off: each step is performed with a client
@@ -40,8 +40,6 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
     private int _procurementOfficerId;
     private int _procurementManagerId;
     private int _qualityInspectorId;
-    private int _supplierAUserId;
-    private int _supplierBUserId;
 
     // Scenario entities.
     private Project _project = null!;
@@ -99,13 +97,10 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         _procurementManagerId = (await AddUserAsync("Mira Manager", "procurement.manager@scenario.test", "ProcurementManager")).Id;
         _qualityInspectorId = (await AddUserAsync("Dinesh Inspector", "quality.inspector@scenario.test", "QualityInspector")).Id;
 
-        // Supplier portal logins, each bound to exactly one supplier.
-        var supplierAUser = await AddUserAsync("Nimal Perera (Portal)", "sales@suppliera.test", "Supplier");
-        supplierAUser.SupplierId = _supplierA.Id;
-        _supplierAUserId = supplierAUser.Id;
-        var supplierBUser = await AddUserAsync("Kamal Silva (Portal)", "info@supplierb.test", "Supplier");
-        supplierBUser.SupplierId = _supplierB.Id;
-        _supplierBUserId = supplierBUser.Id;
+        // No supplier logins. A supplier is an external stakeholder contacted by
+        // email, so the scenario runs end-to-end without any supplier user: the
+        // Procurement Officer issues the RFQ, records the quotation that came
+        // back by email, and the Procurement Manager approves.
         await _db.SaveChangesAsync();
 
         // --- C1: Site Engineer raises a material request --------------------
@@ -133,7 +128,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
     [Fact]
     public async Task C1_to_C4_full_scenario_completes_across_every_role()
     {
-        // --- Step 1 — Site Engineer submits the material request ------------
+        // --- Step 1 â€” Site Engineer submits the material request ------------
         var materialRequestService = new MaterialRequestService(_db);
         var created = await materialRequestService.CreateRequestAsync(new MaterialRequest
         {
@@ -149,7 +144,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         Assert.Equal(MaterialRequestStatus.PendingApproval, created.Status);
         var requestId = created.Id;
 
-        // --- Step 2 — Manager approves the material request -----------------
+        // --- Step 2 â€” Manager approves the material request -----------------
         var approval = await materialRequestService.RecordApprovalAsync(
             requestId, _procurementManagerId, ApprovalDecision.Approved, "Approved for the phase 2 pour.");
         Assert.Equal(ApprovalDecision.Approved, approval.Decision);
@@ -157,7 +152,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         var approved = await _db.MaterialRequests.AsNoTracking().FirstAsync(r => r.Id == requestId);
         Assert.Equal(MaterialRequestStatus.Approved, approved.Status);
 
-        // --- Step 3 — Procurement Officer issues an RFQ --------------------
+        // --- Step 3 â€” Procurement Officer issues an RFQ --------------------
         // Only Active suppliers can be invited: the controller rejects a
         // Suspended one outright, so B is quoted separately in step 4.
         using (var procurementOfficer = _factory.CreateClientFor("ProcurementOfficer"))
@@ -190,7 +185,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         }
 
-        // --- Step 4 — Suppliers submit their own quotations via the portal ---
+        // --- Step 4 â€” Suppliers submit their own quotations via the portal ---
         //   A: 250 @ 2100 (Active)     -> eligible, full coverage
         //   C: 200 @ 2050 (Active)     -> cheapest total but partial coverage
         //   B: 250 @ 2040 (Suspended)  -> lowest unit price, but ineligible
@@ -221,26 +216,21 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         var quotations = await _db.Quotations.AsNoTracking().Where(q => q.MaterialRequestId == requestId).ToListAsync();
         Assert.Equal(3, quotations.Count);
 
-        // Each quotation is attributed to its own supplier — never to a client-supplied id.
+        // Each quotation is attributed to its own supplier â€” never to a client-supplied id.
         Assert.Equal(3, quotations.Select(q => q.SupplierId).Distinct().Count());
 
-        // A Suspended supplier is refused at submission time, even on an RFQ
-        // it was once invited to.
-        using (var suspended = _factory.CreateSupplierClient(_supplierB.Id))
-        {
-            using var response = await suspended.PostAsync(
-                $"/api/supplier-portal/rfqs/{_rfq.Id}/quotations",
-                Json(new
-                {
-                    quotationDate = today,
-                    validUntil = validUntil,
-                    transportCharge = 0m,
-                    items = new[] { new { materialRequestItemId = await FirstLineIdAsync(requestId), quantity = 250m, unitPrice = 1m } }
-                }));
-            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        }
+        // Recording a quotation is an internal Procurement Officer action, never a
+        // supplier one: every quotation above was keyed in against the supplier
+        // *business entity* by the desk, after arriving by email. A suspended
+        // supplier's offer is still recorded when it lands — eligibility is
+        // decided later by the quotation agent and deterministic validation
+        // (covered by ProcurementValidationServiceTests and the agent tests),
+        // never by a supplier login.
+        var suspendedQuote = quotations.Single(q => q.SupplierId == _supplierB.Id);
+        Assert.Equal(QuotationStatus.Submitted, suspendedQuote.Status);
+        Assert.Equal(510_000m, suspendedQuote.TotalAmount);
 
-        // --- Step 5 — AI analysis + deterministic validation ---------------
+        // --- Step 5 â€” AI analysis + deterministic validation ---------------
         var httpClient = new HttpClient();
         var workflowService = new ProcurementWorkflowService(
             _db,
@@ -258,7 +248,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         Assert.Equal("AwaitingApproval", details.Status);
 
         // Deterministic validation passed, and the agent's recommendation is
-        // the eligible full-coverage supplier — not the cheapest unit price.
+        // the eligible full-coverage supplier â€” not the cheapest unit price.
         Assert.NotNull(details.Validation);
         Assert.True(details.Validation!.IsValid);
         Assert.Empty(details.Validation.Errors);
@@ -276,7 +266,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         Assert.Contains("Suspended", warnings);
         Assert.Contains("Supplier C Wholesale", warnings);
 
-        // --- Step 6 — Procurement Manager approves the recommendation ------
+        // --- Step 6 â€” Procurement Manager approves the recommendation ------
         // Approving is what raises the purchase order: the workflow completes
         // and the PO is created in the same transaction, so there is no window
         // in which an approval exists without its order.
@@ -286,7 +276,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
             _procurementManagerId);
         Assert.Equal(AgentApprovalStatus.Approved, decision.Decision);
 
-        // --- Step 7 — Purchase order is raised from the approved workflow ----
+        // --- Step 7 â€” Purchase order is raised from the approved workflow ----
         var purchaseOrder = await _db.PurchaseOrders
             .AsNoTracking()
             .SingleAsync(p => p.QuotationId == winnerQuotationId);
@@ -310,7 +300,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         Assert.Equal(2, await _db.Quotations.AsNoTracking()
             .CountAsync(q => q.MaterialRequestId == requestId && q.Status == QuotationStatus.Rejected));
 
-        // --- Step 8 — Site Officer records receiving, with a shortage ------
+        // --- Step 8 â€” Site Officer records receiving, with a shortage ------
         // 200 of 250 arrived, 10 damaged: a real discrepancy, not a clean receipt.
         var deliveryService = new DeliveryService(_db, logger: NullLogger<DeliveryService>.Instance);
         var delivery = await deliveryService.RecordDeliveryAsync(new Delivery
@@ -340,7 +330,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         // The issues are attributed to the Site Officer who recorded them.
         Assert.All(issues, i => Assert.Equal(_siteOfficerId, i.ReportedByUserId));
 
-        // --- Step 9 — Quality Inspector rejects part of the delivery --------
+        // --- Step 9 â€” Quality Inspector rejects part of the delivery --------
         // 190 inspected, 170 accepted, 20 rejected -> an NCR is raised.
         var qualityService = new QualityInspectionService(_db);
         var inspection = await qualityService.CompleteInspectionAsync(new Inspection
@@ -372,7 +362,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
 
         Assert.Equal(_qualityInspectorId, inspection.InspectorUserId);
 
-        // --- Step 10 — an NCR exists and is awaiting corrective action ------
+        // --- Step 10 â€” an NCR exists and is awaiting corrective action ------
         // The inspection service raises the NCR already in
         // CorrectiveActionRequired (the agent recommends that status for a
         // partial rejection), so the review starts from there.
@@ -384,7 +374,7 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
         Assert.Equal(_supplierA.Id, ncr.SupplierId);
         Assert.Equal(20m, ncr.QuantityAffected);
 
-        // --- Step 11 — Manager drives the NCR to resolution -----------------
+        // --- Step 11 â€” Manager drives the NCR to resolution -----------------
         // CorrectiveActionRequired -> Resolved -> Closed
         var resolved = await qualityService.TransitionNonConformanceAsync(ncr.Id,
             new NcrReviewRequest(
@@ -423,13 +413,18 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
     private async Task SubmitSupplierQuotationAsync(
         int supplierId, int requestId, decimal quantity, decimal unitPrice, DateOnly date, DateOnly validUntil)
     {
-        using var client = _factory.CreateSupplierClient(supplierId);
+        // The supplier never logs in. The Procurement Officer records the
+        // quotation that arrived by email against the invited supplier â€” this is
+        // the `SupplierAdministrationOnly` endpoint, not the removed portal.
+        using var client = _factory.CreateClientForUser(_procurementOfficerId, "ProcurementOfficer");
         using var response = await client.PostAsync(
-            $"/api/supplier-portal/rfqs/{_rfq.Id}/quotations",
+            $"/api/material-requests/{requestId}/quotations",
             Json(new
             {
+                supplierId,
                 quotationDate = date,
-                validUntil = validUntil,
+                validUntil,
+                rfqId = _rfq.Id,
                 promisedDeliveryDate = date.AddDays(7),
                 paymentTerms = "Net 30",
                 transportCharge = 0m,

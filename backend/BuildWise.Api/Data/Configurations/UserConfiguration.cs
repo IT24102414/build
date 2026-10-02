@@ -26,15 +26,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.IsActive)
             .HasDefaultValue(true);
 
-        // Supplier portal binding. Set only for Supplier role accounts; the API
-        // treats this as the authoritative supplier scope for that login.
-        builder.Property(u => u.SupplierId);
-
-        builder.HasOne(u => u.Supplier)
-            .WithMany()
-            .HasForeignKey(u => u.SupplierId)
-            .IsRequired(false)
-            .OnDelete(DeleteBehavior.Restrict);
+        // No SupplierId foreign key: a supplier is an external stakeholder with
+        // no BuildWise account, so no user row is ever linked to a Supplier.
+        // The Supplier entity is still configured and still referenced by
+        // RFQs, quotations, purchase orders and deliveries.
 
         builder.HasIndex(u => u.Email)
             .IsUnique();

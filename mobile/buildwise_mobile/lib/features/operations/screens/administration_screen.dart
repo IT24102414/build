@@ -8,6 +8,12 @@ import '../services/operations_service.dart';
 ///
 /// The health section is the quickest way to confirm during a demo that all four
 /// AI agents are actually reachable, rather than only that the API is up.
+///
+/// **Not routed in the Flutter shell.** Administration is governance work, not
+/// field work, so it belongs to the React web application. A Site Manager or
+/// Administrator who signs in on mobile is shown the web-only notice instead
+/// (`features/auth/screens/web_only_notice_screen.dart`). Kept as the
+/// mobile-side reference for the same API contract.
 class AdministrationScreen extends StatefulWidget {
   const AdministrationScreen({super.key, this.service});
 

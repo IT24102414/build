@@ -68,6 +68,7 @@ export const qualityApi = {
     return request(`/quality-inspections${query.size ? `?${query}` : ''}`)
   },
   getInspection: (id) => request(`/quality-inspections/${id}`),
+  completeInspection: (payload) => request('/quality-inspections', { method: 'POST', body: payload }),
   // COMPONENT 4 agent: runs the QualityRiskAnalysisAgent (:8004) over one
   // completed inspection. Advisory only — it does not create the NCR or change
   // the inspection status; those are decided by the backend and the inspector.

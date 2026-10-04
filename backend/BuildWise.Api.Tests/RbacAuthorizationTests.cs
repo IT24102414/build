@@ -64,7 +64,11 @@ public class RbacAuthorizationTests : IClassFixture<RbacApiFactory>
         { "GET",    "/api/quotations/1",                             "SiteOfficer" },
 
         // --- Agent workflows & approvals ----------------------------------
-        { "GET",    "/api/agent-workflows",                          "SiteEngineer" },
+        // SiteEngineer consumes workflow outcomes (RFQ recommendations reference
+        // them), so InternalStaffOnly admits every internal role here. The
+        // matrix asserts only that the unauthenticated caller (401) and the
+        // external Supplier token (403) are refused.
+        { "GET",    "/api/agent-workflows",                          "Supplier" },
         { "GET",    "/api/agent-workflows/1",                        "QualityInspector" },
         { "POST",   "/api/material-requests/1/procurement-workflow",  "SiteEngineer" },
         { "POST",   "/api/procurement-workflow/1/decision",          "ProcurementOfficer" },

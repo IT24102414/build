@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import Button from './Button'
 
 // Closes the panel on Escape. Kept separate so the Drawer stays declarative.
 function useEscapeToClose(open, onClose) {

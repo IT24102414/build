@@ -17,13 +17,13 @@ function useEscapeToClose(open, onClose) {
  * overlay so Escape and click-outside behave like every other modal.
  *
  * `placement` picks the layout:
- *   'side'   (default) - full-height panel pinned to the right edge.
- *   'center' - a centred modal card, capped in height so it scrolls internally.
+ *   'center' (default) - a centred modal card, capped in height so it scrolls internally.
+ *   'side'   - legacy full-height panel pinned to the right edge.
  *
  * `open` prop gates rendering — if false, nothing is mounted so the page
  * beneath is fully interactive and the white overlay bug is gone.
  */
-export default function Drawer({ open, title, subtitle, onClose, children, footer, placement = 'side' }) {
+export default function Drawer({ open, title, subtitle, onClose, children, footer, placement = 'center' }) {
   useEscapeToClose(open, onClose)
 
   // Do not mount at all when closed — avoids the "white panel always visible" bug

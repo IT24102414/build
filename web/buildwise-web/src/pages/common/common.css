@@ -50,7 +50,8 @@
 .form-span { grid-column: 1 / -1; }
 .form-actions { display: flex; justify-content: flex-end; gap: var(--space-3); padding-top: var(--space-2); }
 
-/* Side panel for detail views (delivery detail, non-conformance detail). */
+/* Side panel for detail views (delivery detail, non-conformance detail).
+   Legacy right-edge variant — kept only for explicit placement="side" callers. */
 .app-drawer {
   position: fixed;
   inset: 0 0 0 auto;
@@ -99,9 +100,10 @@
    hard-to-read layout. */
 .app-drawer .detail-columns { grid-template-columns: 1fr; }
 .app-drawer .detail-row { grid-template-columns: 1fr; gap: var(--space-1); }
-/* Centred modal variant: sits in the middle of the overlay's centering grid
-   instead of pinned to the right edge, and is capped in height so long detail
-   pages scroll inside the card rather than running off the screen. */
+/* Centred modal variant (default): sits in the middle of the overlay's
+   centering grid instead of pinned to the right edge, and is capped in height
+   so long detail pages scroll inside the card rather than running off the
+   screen. Uses flex column so header/footer stay visible while the body scrolls. */
 .app-drawer--center {
   position: relative;
   inset: auto;
@@ -109,6 +111,10 @@
   max-height: calc(100vh - 4rem);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-white);
+  box-shadow: var(--shadow-lg);
   animation: drawer-center-in 200ms var(--ease-out);
 }
 @keyframes drawer-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }

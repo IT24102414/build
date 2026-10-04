@@ -116,7 +116,6 @@ export default function DeliveriesPage() {
         open={selectedDelivery != null}
         title={selectedDelivery ? `Delivery #${selectedDelivery.id}` : ''}
         subtitle={selectedDelivery?.deliveryReference ?? ''}
-        placement="center"
         onClose={closeDetail}
       >
         {selectedDelivery && <DeliveryDetail delivery={selectedDelivery} />}

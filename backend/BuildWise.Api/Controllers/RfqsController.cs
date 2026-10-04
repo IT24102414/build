@@ -166,10 +166,15 @@ public class RfqsController : ControllerBase
             $"Please submit your formal quotation via the BuildWise Supplier Portal or reply directly to procurement.\n\n" +
             $"Thank you,\nBuildWise Procurement Team";
 
-        await _emailService.SendAsync(dto.RecipientEmail.Trim(), subject, body);
-        _logger.LogInformation("RFQ #{RfqId} email sent to {Recipient}", rfq.Id, dto.RecipientEmail);
+        var sent = await _emailService.SendAsync(dto.RecipientEmail.Trim(), subject, body);
+        if (sent)
+        {
+            _logger.LogInformation("RFQ #{RfqId} email sent to {Recipient}", rfq.Id, dto.RecipientEmail);
+            return Ok(new { message = $"RFQ notification email sent successfully to {dto.RecipientEmail}", emailSent = true });
+        }
 
-        return Ok(new { message = $"RFQ notification email sent successfully to {dto.RecipientEmail}" });
+        _logger.LogWarning("RFQ #{RfqId} email for {Recipient} was logged, not sent — SMTP is not configured.", rfq.Id, dto.RecipientEmail);
+        return Ok(new { message = $"RFQ #{rfq.Id} recorded, but the notification email was NOT sent (email service not configured on the server).", emailSent = false });
     }
 
     [HttpPost("{id:int}/close")]

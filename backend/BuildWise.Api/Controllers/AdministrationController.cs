@@ -81,7 +81,10 @@ public class AdministrationController : ControllerBase
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        // Send welcome email to the newly created user
+        // Send welcome email to the newly created user. The result is returned
+        // on the DTO so the UI can tell the admin whether the message really
+        // left the server (SMTP configured) or only reached the server logs.
+        var emailSent = false;
         try
         {
             var subject = "Welcome to BuildWise — Your Account Has Been Created";
@@ -104,14 +107,16 @@ public class AdministrationController : ControllerBase
                 Best regards,
                 BuildWise Administration Team
                 """;
-            await _emailService.SendAsync(user.Email, subject, body);
+            emailSent = await _emailService.SendAsync(user.Email, subject, body);
+            if (!emailSent)
+                _logger.LogWarning("Welcome email for {Email} was logged, not sent — SMTP is not configured.", user.Email);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to send welcome email to {Email}", user.Email);
         }
 
-        return Ok(MapUser(user));
+        return Ok(MapUser(user) with { EmailSent = emailSent });
     }
 
 

@@ -80,7 +80,14 @@ export default function AdministrationPage() {
     setCreatingUser(true)
     try {
       const created = await administrationApi.createUser(userForm)
-      setMessage(`User "${created.fullName}" created successfully! A welcome email with login credentials has been sent to ${created.email}.`)
+      if (created.emailSent === true) {
+        setMessage(`User "${created.fullName}" created successfully! A welcome email with login credentials has been sent to ${created.email}.`)
+      } else {
+        // SMTP is not configured on the API, so the message was only written to
+        // the server logs — don't claim it reached the inbox. The temporary
+        // password is echoed here so the admin can share it manually.
+        setMessage(`User "${created.fullName}" created successfully, but the welcome email was NOT sent (email service not configured on the server). Share these credentials manually — Email: ${created.email}, Temporary password: ${userForm.password}.`)
+      }
       setUserForm(INITIAL_USER_FORM)
       setIsAddUserOpen(false)
       await load()

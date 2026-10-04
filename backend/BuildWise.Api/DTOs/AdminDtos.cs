@@ -15,7 +15,8 @@ public record AdminUserDto(
     string Email,
     bool IsActive,
     List<string> Roles,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    bool? EmailSent = null
 );
 
 public record AuditLogDto(

@@ -87,13 +87,50 @@ public class QuotationsController : ControllerBase
         if (dto.ValidUntil < dto.QuotationDate)
             return BadRequest("Quotation ValidUntil cannot be earlier than QuotationDate.");
 
+        // A quotation is a statement made on the day it is issued. Accepting a
+        // future-dated one would let a supplier pre-date their offer and bypass
+        // the RFQ response deadline, so the date cannot be ahead of today.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (dto.QuotationDate > today)
+            return BadRequest($"Quotation date '{dto.QuotationDate:yyyy-MM-dd}' cannot be in the future (today is {today:yyyy-MM-dd}).");
+
+        // Transport is a cost added to the quoted price. A negative charge would
+        // silently reduce the landed cost the manager approves.
+        if (dto.TransportCharge < 0)
+            return BadRequest("Transport charge cannot be negative.");
+
+        // The promised delivery date has to be achievable and still valid: it must
+        // fall on or after the quotation date, on or before the validity expiry
+        // (otherwise the supplier could withdraw the offer before the goods land),
+        // and on or before the material's required-by date on the request.
+        if (dto.PromisedDeliveryDate.HasValue)
+        {
+            if (dto.PromisedDeliveryDate.Value < dto.QuotationDate)
+                return BadRequest($"Promised delivery date '{dto.PromisedDeliveryDate:yyyy-MM-dd}' cannot be earlier than the quotation date.");
+
+            if (dto.PromisedDeliveryDate.Value > dto.ValidUntil)
+                return BadRequest($"Promised delivery date '{dto.PromisedDeliveryDate:yyyy-MM-dd}' cannot be later than the quotation validity date '{dto.ValidUntil:yyyy-MM-dd}'.");
+
+            if (request.RequiredDate != default && dto.PromisedDeliveryDate.Value > request.RequiredDate)
+                return BadRequest($"Promised delivery date '{dto.PromisedDeliveryDate:yyyy-MM-dd}' cannot be later than the material required date '{request.RequiredDate:yyyy-MM-dd}'.");
+        }
+
         if (dto.RfqId.HasValue)
         {
-            var rfq = await _db.Rfqs.FirstOrDefaultAsync(r => r.Id == dto.RfqId.Value);
+            var rfq = await _db.Rfqs
+                .Include(r => r.Suppliers)
+                .FirstOrDefaultAsync(r => r.Id == dto.RfqId.Value);
             if (rfq is null || rfq.MaterialRequestId != requestId)
                 return BadRequest("RFQ is missing or belongs to a different material request.");
             if (rfq.Status != RfqStatus.Issued)
                 return BadRequest("Quotations can only be recorded against an Issued RFQ.");
+
+            // Only a supplier that was actually invited to this RFQ may quote on
+            // it. Without this check an officer could record a winning offer from
+            // a supplier that was never asked, bypassing the RFQ entirely.
+            var invited = rfq.Suppliers.Any(rs => rs.SupplierId == dto.SupplierId);
+            if (!invited)
+                return BadRequest($"Supplier #{dto.SupplierId} was not invited to RFQ #{rfq.Id}. Only invited suppliers can be quoted against it.");
         }
 
         var supplier = await _db.Suppliers.FindAsync(dto.SupplierId);

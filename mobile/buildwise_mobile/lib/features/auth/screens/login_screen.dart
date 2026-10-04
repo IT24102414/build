@@ -10,19 +10,25 @@ class _DemoAccount {
   final String email;
 }
 
-/// Seeded accounts for the three roles that use the mobile field app.
+/// Seeded accounts, one per internal role.
 ///
-/// The Site Manager, Procurement Officer, Procurement Manager and Administrator
-/// are deliberately absent: their work runs on the web application. Signing in
-/// as one of them on mobile shows the web-only notice. See
-/// `core/auth/buildwise_roles.dart` (`mobileCapable`).
+/// This list mirrors the web app's quick demo login **exactly** — same seven
+/// roles, same labels, same order — so an evaluator can walk either client with
+/// the same credentials and reach the same screens. The earlier three-account
+/// list was a leftover from when the mobile app only served field roles; now
+/// that all seven roles work on mobile, a shorter list would misrepresent the
+/// system.
 ///
 /// There is no supplier account. Suppliers are external parties contacted by
 /// email and never sign in to BuildWise.
 const _demoAccounts = [
+  _DemoAccount('Procurement Officer', 'procurement.officer@buildwise.demo'),
+  _DemoAccount('Procurement Manager', 'procurement.manager@buildwise.demo'),
   _DemoAccount('Site Engineer', 'site.engineer@buildwise.demo'),
   _DemoAccount('Site Officer', 'site.officer@buildwise.demo'),
+  _DemoAccount('Site Manager', 'site.manager@buildwise.demo'),
   _DemoAccount('Quality Inspector', 'quality.inspector@buildwise.demo'),
+  _DemoAccount('Administrator', 'admin@buildwise.demo'),
 ];
 const _demoPassword = 'Passw0rd!';
 
@@ -127,7 +133,12 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 Text('Quick demo login', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 4),
-                const Text('Seeded accounts for evaluation.', style: TextStyle(color: AppColors.textMuted)),
+                // Same wording as the web app, so the two login screens read
+                // identically during a walkthrough.
+                const Text(
+                  'Seeded accounts for evaluation — one per role.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
                 const SizedBox(height: 12),
                 ..._demoAccounts.map(
                   (account) => Padding(

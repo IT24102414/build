@@ -149,6 +149,15 @@ public class PurchaseOrdersController : ControllerBase
         if (!Enum.TryParse<PurchaseOrderStatus>(dto.Status, true, out var newStatus))
             return BadRequest($"Invalid status '{dto.Status}'. Allowed: Confirmed, InProgress, Completed, Cancelled.");
 
+        // Status is a lifecycle, not a free-text field. Without this map any role
+        // on the procurement desk could move a Completed order back to Confirmed,
+        // reopen a Cancelled order, or skip straight from Confirmed to Completed
+        // and record fulfilment that never happened.
+        if (!IsAllowedTransition(po.Status, newStatus))
+            return BadRequest(
+                $"Purchase Order #{id} cannot move from '{po.Status}' to '{newStatus}'. " +
+                "Allowed: Confirmed -> InProgress -> Completed, and Cancelled from Confirmed or InProgress.");
+
         var oldStatus = po.Status;
         po.Status = newStatus;
         po.UpdatedAt = DateTime.UtcNow;
@@ -158,5 +167,39 @@ public class PurchaseOrdersController : ControllerBase
         _logger.LogInformation("Purchase Order #{Id} status changed from {OldStatus} to {NewStatus}", id, oldStatus, newStatus);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// The purchase-order lifecycle. Goods move forward one step at a time, and
+    /// an order may be cancelled only while it is still live.
+    /// <para>
+    /// <c>Confirmed -&gt; Completed</c> is deliberately NOT allowed: skipping
+    /// <c>InProgress</c> would record fulfilment that never happened, and
+    /// <see cref="DeliveryService"/> only accepts deliveries against a Confirmed
+    /// order, so a completed order with no receiving history would be
+    /// unauditable. <c>Completed</c> and <c>Cancelled</c> are terminal — reopening
+    /// either would contradict deliveries and inspections that already reference
+    /// the order.
+    /// </para>
+    /// </summary>
+    private static bool IsAllowedTransition(PurchaseOrderStatus from, PurchaseOrderStatus to)
+    {
+        if (from == to) return false;
+
+        return (from, to) switch
+        {
+            // A newly created order is confirmed before any receiving starts.
+            (PurchaseOrderStatus.Created, PurchaseOrderStatus.Confirmed) => true,
+            (PurchaseOrderStatus.Created, PurchaseOrderStatus.Cancelled) => true,
+
+            (PurchaseOrderStatus.Confirmed, PurchaseOrderStatus.InProgress) => true,
+            (PurchaseOrderStatus.Confirmed, PurchaseOrderStatus.Cancelled) => true,
+
+            (PurchaseOrderStatus.InProgress, PurchaseOrderStatus.Completed) => true,
+            (PurchaseOrderStatus.InProgress, PurchaseOrderStatus.Cancelled) => true,
+
+            // Completed and Cancelled are terminal.
+            _ => false
+        };
     }
 }

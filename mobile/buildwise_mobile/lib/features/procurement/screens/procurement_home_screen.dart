@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/error_widget.dart' as buildwise;
+import '../../../core/widgets/field_format.dart';
 import '../../operations/services/operations_service.dart';
 import 'material_request_procurement_view.dart';
 
@@ -72,7 +73,10 @@ class _ProcurementHomeScreenState extends State<ProcurementHomeScreen> {
                         decoration: const InputDecoration(labelText: 'Material request'),
                         items: _requests.map((request) => DropdownMenuItem<int>(
                           value: (request['id'] as num).toInt(),
-                          child: Text('Request #${request['id']} · ${request['projectName']}'),
+                          child: Text(
+                           FieldFormat.materialRequestLabel(request),
+                           overflow: TextOverflow.ellipsis,
+                         ),
                         )).toList(),
                         onChanged: (value) => setState(() => _selectedId = value),
                       ),

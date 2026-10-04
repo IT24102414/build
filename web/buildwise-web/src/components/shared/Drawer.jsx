@@ -12,32 +12,40 @@ function useEscapeToClose(open, onClose) {
 }
 
 /**
- * Side panel for detail views that would otherwise occupy a whole page section
+ * Detail panel for views that would otherwise occupy a whole page section
  * (delivery detail, non-conformance detail). Reuses the app's `.dialog-backdrop`
  * overlay so Escape and click-outside behave like every other modal.
+ *
+ * `placement` picks the layout:
+ *   'side'   (default) - full-height panel pinned to the right edge.
+ *   'center' - a centred modal card, capped in height so it scrolls internally.
  *
  * `open` prop gates rendering — if false, nothing is mounted so the page
  * beneath is fully interactive and the white overlay bug is gone.
  */
-export default function Drawer({ open, title, subtitle, onClose, children, footer }) {
+export default function Drawer({ open, title, subtitle, onClose, children, footer, placement = 'side' }) {
   useEscapeToClose(open, onClose)
 
   // Do not mount at all when closed — avoids the "white panel always visible" bug
   if (!open) return null
 
+  // A centred panel must be free inside the backdrop's centering grid, so the
+  // side-panel overrides (stretch/zero padding/push right) apply only to 'side'.
+  const isCentered = placement === 'center'
+
   return (
     <div
       className="dialog-backdrop"
       role="presentation"
-      style={{ alignItems: 'stretch', padding: 0 }}
+      style={isCentered ? undefined : { alignItems: 'stretch', padding: 0 }}
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <div
-        className="app-drawer"
+        className={isCentered ? 'app-drawer app-drawer--center' : 'app-drawer'}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        style={{ marginLeft: 'auto' }}
+        style={isCentered ? undefined : { marginLeft: 'auto' }}
       >
         <header className="app-drawer__head">
           <div>

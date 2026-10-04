@@ -68,31 +68,58 @@ class BuildWiseRoles {
     administrator,
   };
 
-  /// Roles that have a working surface on the mobile app.
+  /// Roles that approve someone else's work at a human decision gate.
   ///
-  /// The mobile app is a **field operations** tool, not a smaller copy of the
-  /// React web system. Exactly three roles have field work to do:
-  ///
-  /// - **Site Engineer** — raises and tracks material requests
-  /// - **Site Officer** — receives physical deliveries against a confirmed PO
-  /// - **Quality Inspector** — inspects deliveries and raises NCRs
-  ///
-  /// Everything else is desk or governance work and stays on the web app:
-  /// procurement (RFQ by email, recording returned quotations, comparison,
-  /// PO creation), management approval, and administration.
-  static const Set<String> mobileCapable = {
-    siteEngineer,
-    siteOfficer,
-    qualityInspector,
+  /// Mirrors the backend `MaterialRequestApprovalOnly` policy. The API enforces
+  /// it; this set only decides whether the Approve/Reject controls are drawn, so
+  /// a non-approver never taps a button that would 403.
+  static const Set<String> approvers = {
+    siteManager,
+    procurementManager,
+    administrator,
   };
 
-  /// Roles whose work happens entirely on the web application.
-  static const Set<String> webOnly = {
-    siteManager,
+  /// Roles that run the procurement desk: RFQ, quotation recording, comparison
+  /// and purchase order creation.
+  ///
+  /// Mirrors the backend `ProcurementStaffAndAdmin` / `SupplierAdministrationOnly`
+  /// policies. Note this is *not* the same as [approvers]: a Site Manager
+  /// approves a material request but does not raise RFQs.
+  static const Set<String> procurementDesk = {
     procurementOfficer,
     procurementManager,
     administrator,
   };
+
+  /// Every role that has a working surface on the mobile app.
+  ///
+  /// All seven internal roles are mobile-capable. Each one sees only the tabs
+  /// its own capabilities allow, driven by the sets above:
+  ///
+  /// | Role              | Mobile tabs                                    |
+  /// |-------------------|------------------------------------------------|
+  /// | Site Engineer     | Home, Requests, Status, Inspections, Agents     |
+  /// | Site Officer      | Home, Deliveries, Status, Inspections, Agents  |
+  /// | Quality Inspector | Home, Inspections, Agents                       |
+  /// | Site Manager      | Home, Approvals, Agents                        |
+  /// | Procurement Officer | Home, RFQs, Quotations, Agents               |
+  /// | Procurement Manager | Home, Approvals, RFQs, Quotations, Orders, Agents |
+  /// | Administrator     | Home, Administration, Agents                    |
+  ///
+  /// The field roles keep their purpose-built screens. The desk roles get the
+  /// same screens the React app uses, pointed at the identical API endpoints, so
+  /// the two clients cannot drift apart in behaviour — only in presentation.
+  ///
+  /// There is still **no `Supplier` role**: a supplier is an external party
+  /// contacted by email, so it is absent here and gains no access.
+  static const Set<String> mobileCapable = internalStaff;
+
+  /// Roles whose work is governance rather than field or desk execution.
+  ///
+  /// Retained because the shell still needs a label for these roles, and
+  /// because [isWebOnly] must stay false for a real internal role — the mobile
+  /// app is not a second-rate client, it is the same system in a pocket.
+  static const Set<String> governance = {administrator};
 
   // --- Queries -------------------------------------------------------------
 
@@ -123,6 +150,27 @@ class BuildWiseRoles {
   /// Whether this account has anything to do on the mobile app at all.
   static bool canUseMobileApp(Iterable<String> roles) =>
       hasAny(normalize(roles), mobileCapable);
+
+  /// Whether this account can approve at a human decision gate.
+  static bool canApprove(Iterable<String> roles) =>
+      hasAny(normalize(roles), approvers);
+
+  /// Whether this account runs the procurement desk.
+  static bool canRunProcurement(Iterable<String> roles) =>
+      hasAny(normalize(roles), procurementDesk);
+
+  /// Whether this account administers users, audit and health.
+  static bool canAdminister(Iterable<String> roles) =>
+      hasAny(normalize(roles), governance);
+
+  /// Roles that still belong on the web app.
+  ///
+  /// Now empty: all seven internal roles work on mobile. It is kept so callers
+  /// that branch on it keep compiling, and so the one case that genuinely
+  /// belongs on neither client — a non-internal claim such as a stray
+  /// `Supplier` — is still expressible.
+  static Set<String> get webOnly =>
+      internalStaff.difference(mobileCapable);
 
   /// Whether this account must be directed to the web app instead.
   static bool isWebOnly(Iterable<String> roles) =>

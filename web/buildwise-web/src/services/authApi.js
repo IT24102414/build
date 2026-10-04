@@ -11,13 +11,19 @@ async function request(path, body) {
 
   if (!res.ok) {
     let message = `Request failed (${res.status})`
+    let payload = null
     try {
       const data = await res.json()
-      message = data?.error || message
+      payload = data
+      // `error` is the auth controller's key; `message` covers ValidationProblemDetails.
+      message = data?.error || data?.message || message
     } catch {
       // no JSON body
     }
-    throw new Error(message)
+    const error = new Error(message)
+    error.status = res.status
+    error.payload = payload
+    throw error
   }
 
   return res.json()

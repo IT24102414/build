@@ -10,7 +10,7 @@ namespace BuildWise.Api.Controllers;
 /// <summary>Read-only operational monitoring for persisted agent executions.</summary>
 [ApiController]
 [Route("api/agent-workflows")]
-[Authorize(Policy = Policies.ProcurementStaffAndAdmin)]
+[Authorize(Policy = Policies.InternalStaffOnly)]
 public class AgentWorkflowsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;

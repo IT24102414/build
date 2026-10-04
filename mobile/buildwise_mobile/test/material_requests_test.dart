@@ -9,12 +9,15 @@ class MockOperationsService extends OperationsService {
       'id': 74,
       'projectName': 'Riverside Apartments — Block C',
       'itemCount': 1,
+      // Mirrors the summary DTO: the list labels each row with the material.
+      'materialNames': ['Cement (50kg bag)'],
       'status': 'Approved',
     },
     {
       'id': 75,
       'projectName': 'Riverside Apartments — Block C',
       'itemCount': 1,
+      'materialNames': ['Concrete Blocks'],
       'status': 'PendingApproval',
     }
   ];
@@ -90,9 +93,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Material Requests'), findsOneWidget);
-      expect(find.text('Request #74 · 1 item(s)'), findsOneWidget);
+      // Rows lead with the material name, not "Request #74 · 1 item(s)". The id
+      // moved to its own line below it.
+      expect(find.text('Cement (50kg bag)'), findsOneWidget);
+      expect(find.text('Concrete Blocks'), findsOneWidget);
+      expect(find.text('Request #74'), findsOneWidget);
       expect(find.text('Approved'), findsOneWidget);
-      expect(find.text('Request #75 · 1 item(s)'), findsOneWidget);
+      expect(find.text('Request #75'), findsOneWidget);
       expect(find.text('PendingApproval'), findsOneWidget);
       expect(find.text('Run AI Analysis'), findsNWidgets(2));
     });

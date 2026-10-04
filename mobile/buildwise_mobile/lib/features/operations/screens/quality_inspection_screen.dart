@@ -651,7 +651,7 @@ class _InspectionFormState extends State<_InspectionForm> {
                   const SizedBox(width: 6),
                   Switch(
                     value: _checks[key]!,
-                    activeColor: Colors.green.shade700,
+                    activeThumbColor: Colors.green.shade700,
                     inactiveThumbColor: Colors.red.shade700,
                     onChanged: (value) => setState(() => _checks[key] = value),
                   ),

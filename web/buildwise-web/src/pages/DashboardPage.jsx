@@ -16,7 +16,41 @@ const ROLE_COPY = {
 }
 
 const FALLBACK_COPY = { title: 'BuildWise Dashboard', description: 'Your role-aware operations overview.', eyebrow: 'Workspace' }
+/**
+ * Single display format for audit timestamps across every dashboard and
+ * workspace: `02 Oct 2026 · 12:02 PM`.
+ *
+ * The stored value is UTC and is never modified — this only formats it. Using
+ * one helper means two dashboards can never disagree about how the same moment
+ * is written, and the raw value stays available in the API for anything that
+ * needs to reason about time.
+ */
+export function formatTimestamp(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = date.toLocaleString('en-GB', { month: 'short' })
+  const year = date.getFullYear()
+
+  let hours = date.getHours()
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const suffix = hours >= 12 ? 'PM' : 'AM'
+  hours = hours % 12 || 12
+
+  return `${day} ${month} ${year} · ${hours}:${minutes} ${suffix}`
+}
+
 const formatValue = (metric) => `${Number(metric.value ?? 0).toLocaleString()}${metric.suffix ? ` ${metric.suffix}` : ''}`
+
+// Outcome badge tone, driven by the recorded HTTP status so a refused call is
+// visually distinct from a completed one.
+const outcomeTone = (statusCode) => {
+  if (statusCode >= 200 && statusCode < 300) return 'success'
+  if (statusCode === 401 || statusCode === 403) return 'warning'
+  return 'danger'
+}
 
 export default function DashboardPage() {
   const { roles, user } = useAuth()
@@ -68,8 +102,22 @@ export default function DashboardPage() {
           {dashboard?.alerts?.length ? <ul className="activity-list">{dashboard.alerts.map((alert) => <li className="activity-item" key={`${alert.title}-${alert.detail}`}><span className="activity-dot" /><div><strong>{alert.title}</strong><p>{alert.detail}</p><Button variant="secondary" onClick={() => navigate(alert.route)}>Review</Button></div></li>)}</ul> : <p className="empty-copy">No active alerts for this role.</p>}
         </Card>
       </div>
-      <Card title="Recent activity" subtitle="Your authenticated audit activity">
-        {dashboard?.activity?.length ? <ul className="activity-list">{dashboard.activity.map((item) => <li className="activity-item" key={item.id}><span className="activity-dot" /><div><strong>{item.title}</strong><p>{item.detail}</p><span className="activity-time">{new Date(item.createdAt).toLocaleString()}</span></div></li>)}</ul> : <p className="empty-copy">No recent activity recorded.</p>}
+      <Card title="Recent activity" subtitle="Your activity, mapped to the business records it touched">
+        {dashboard?.activity?.length ? <ul className="activity-list">{dashboard.activity.map((item) => <li className="activity-item" key={item.id}>
+          <span className="activity-dot" />
+          <div>
+            <strong>{item.title}</strong>
+            <p>{item.reference}</p>
+            {item.relatedRecords?.length ? <p className="activity-related">{item.relatedRecords.join(' · ')}</p> : null}
+            {/* The outcome comes from the recorded HTTP status, so a call the
+                backend refused is never presented as a success. */}
+            <StatusBadge tone={outcomeTone(item.statusCode)}>{item.outcome}</StatusBadge>
+            <span className="activity-time">{formatTimestamp(item.occurredAtUtc)}</span>
+            {/* The raw endpoint stays available for debugging without cluttering
+                the summary line. */}
+            {item.endpoint ? <details className="activity-details"><summary>Technical details</summary><code>{item.endpoint} &rarr; HTTP {item.statusCode}</code></details> : null}
+          </div>
+        </li>)}</ul> : <p className="empty-copy">No recent activity recorded.</p>}
       </Card>
     </div>
   )

@@ -51,8 +51,11 @@ public class AdministrationController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.FullName) || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password))
             return BadRequest(new { message = "Full name, email, and password are required." });
 
-        if (dto.Password.Length < 6)
-            return BadRequest(new { message = "Password must be at least 6 characters long." });
+        if (!AccountRules.IsValidEmail(dto.Email))
+            return BadRequest(new { message = $"'{dto.Email}' is not a valid email address." });
+
+        if (!AccountRules.IsValidPassword(dto.Password))
+            return BadRequest(new { message = AccountRules.PasswordRequirementMessage });
 
         var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
         var exists = await _db.Users.AnyAsync(u => u.Email == normalizedEmail);

@@ -28,6 +28,32 @@ class FieldFormat {
     return '${spaced[0].toUpperCase()}${spaced.substring(1)}';
   }
 
+  /// The headline label for a material request: the material name(s).
+  ///
+  /// A row that says only "Request #77 · 1 item(s)" tells a site user nothing
+  /// they can act on, so the material is what the list leads with. The API's
+  /// summary DTO supplies line-ordered `materialNames`; a request covering
+  /// several lines joins them with " · ".
+  ///
+  /// Falls back to the reason, then to a count, so a row is never blank if it
+  /// was served by an older build that predates the field.
+  static String materialRequestLabel(Map<String, dynamic> request) {
+    final names = (request['materialNames'] as List<dynamic>?)
+        ?.map((value) => value.toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+    if (names != null && names.isNotEmpty) return names.join(' · ');
+
+    final reason = request['reason']?.toString().trim();
+    if (reason != null && reason.isNotEmpty) return reason;
+
+    final count = request['itemCount'];
+    if (count is num && count > 0) {
+      return count == 1 ? '1 material' : '$count materials';
+    }
+    return 'Material request';
+  }
+
   /// Status colour for a material request or delivery.
   static StatusTone statusTone(String? status) => switch (status) {
         'Approved' => StatusTone.success,

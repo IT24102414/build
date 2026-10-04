@@ -41,6 +41,22 @@ public class QualityInspectionService
         if (dto.Items.Any(i => i.InspectedQuantity <= 0 || i.AcceptedQuantity < 0 || i.RejectedQuantity < 0 || i.AcceptedQuantity + i.RejectedQuantity != i.InspectedQuantity))
             throw new InvalidOperationException("Inspection quantities must be non-negative and accepted plus rejected must equal inspected quantity.");
 
+        // Rule: a failed checklist point must be explained. The five checks are
+        // mandatory, but recording "fail" with no reason leaves an unusable quality
+        // record — nobody can tell later whether the defect was cosmetic or
+        // structural. The reason lives in Notes, which is the only free-text field
+        // on the inspection, so an explicit note is required when any check failed.
+        var failedChecks = new List<string>();
+        if (dto.QuantityCheck is false) failedChecks.Add("quantity");
+        if (dto.VisualConditionCheck is false) failedChecks.Add("visual condition");
+        if (dto.MoistureCheck is false) failedChecks.Add("moisture");
+        if (dto.PackagingCheck is false) failedChecks.Add("packaging");
+        if (dto.DefectsCheck is false) failedChecks.Add("defects");
+        if (failedChecks.Count > 0 && string.IsNullOrWhiteSpace(dto.Notes))
+            throw new InvalidOperationException(
+                "A reason is required when a checklist item fails: " +
+                string.Join(", ", failedChecks) + ". Describe the failure in the notes field.");
+
         return await CompleteInspectionAsync(new Inspection
         {
             DeliveryId = dto.DeliveryId,
@@ -104,12 +120,53 @@ public class QualityInspectionService
 
         // Rule 2: Quantity Arithmetic Validation
         bool hasRejections = false;
+
+        // Rule 1b: every inspected material must actually have arrived on THIS
+        // delivery. Without this an inspector could post an inspection line for a
+        // material the delivery never contained and the record would look valid
+        // while referring to goods that were never received.
+        //
+        // "Available" is the quantity received on the delivery. Damaged units are
+        // still inspected - deciding whether damaged goods are accepted or
+        // rejected is exactly what this inspection is for - so damaged stock is
+        // not subtracted here.
+        var deliveredQuantities = await _context.DeliveryItems
+            .Where(item => item.DeliveryId == inspection.DeliveryId)
+            .GroupBy(item => item.MaterialId)
+            .Select(group => new
+            {
+                MaterialId = group.Key,
+                Available = group.Sum(item => item.ReceivedQuantity)
+            })
+            .ToListAsync();
+
+        var availableByMaterial = deliveredQuantities.ToDictionary(x => x.MaterialId, x => x.Available);
+
         foreach (var item in inspection.Items)
         {
+            if (!availableByMaterial.TryGetValue(item.MaterialId, out var available))
+                throw new InvalidOperationException(
+                    $"Material {item.MaterialId} is not part of delivery #{inspection.DeliveryId}. " +
+                    "Only materials recorded as received on this delivery can be inspected.");
+
             if (item.AcceptedQuantity < 0 || item.RejectedQuantity < 0 || item.InspectedQuantity < 0)
             {
                 throw new InvalidOperationException(
                     $"Inspected, accepted and rejected quantities cannot be negative for material {item.MaterialId}.");
+            }
+
+            if (item.InspectedQuantity > available)
+            {
+                throw new InvalidOperationException(
+                    $"Inspected quantity cannot exceed the available quantity for material {item.MaterialId}. " +
+                    $"Available {available:0.##}, inspected {item.InspectedQuantity:0.##}.");
+            }
+
+            if (item.RejectedQuantity > item.InspectedQuantity)
+            {
+                throw new InvalidOperationException(
+                    $"Rejected quantity cannot exceed inspected quantity for material {item.MaterialId}. " +
+                    $"Inspected {item.InspectedQuantity:0.##}, rejected {item.RejectedQuantity:0.##}.");
             }
 
             if (item.AcceptedQuantity + item.RejectedQuantity != item.InspectedQuantity)
@@ -325,21 +382,56 @@ public class QualityInspectionService
             .FirstOrDefaultAsync(i => i.Id == id);
     }
 
+    /// <summary>
+    /// The authoritative NCR lifecycle. Every status change must pass through
+    /// this map — <see cref="TransitionNonConformanceAsync"/> and the
+    /// <c>PUT .../status</c> path both use it, so the second endpoint cannot be
+    /// used to skip a step the first one enforces. <c>Closed</c> and
+    /// <c>AcceptedException</c> are terminal.
+    /// </summary>
+    internal static bool IsAllowedTransition(NonConformanceStatus from, NonConformanceStatus to)
+    {
+        if (from == to) return false;
+
+        return (from, to) switch
+        {
+            (NonConformanceStatus.Open, NonConformanceStatus.UnderReview) => true,
+            (NonConformanceStatus.Open, NonConformanceStatus.CorrectiveActionRequired) => true,
+
+            (NonConformanceStatus.UnderReview, NonConformanceStatus.CorrectiveActionRequired) => true,
+            (NonConformanceStatus.UnderReview, NonConformanceStatus.AcceptedException) => true,
+
+            (NonConformanceStatus.CorrectiveActionRequired, NonConformanceStatus.UnderReview) => true,
+            (NonConformanceStatus.CorrectiveActionRequired, NonConformanceStatus.Resolved) => true,
+            (NonConformanceStatus.CorrectiveActionRequired, NonConformanceStatus.AcceptedException) => true,
+
+            (NonConformanceStatus.Resolved, NonConformanceStatus.Closed) => true,
+
+            // Closed and AcceptedException are terminal.
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Statuses that represent a finished defect, and therefore need a written
+    /// resolution before they can be entered.
+    /// </summary>
+    internal static bool RequiresResolution(NonConformanceStatus status) =>
+        status is NonConformanceStatus.Resolved
+            or NonConformanceStatus.Closed
+            or NonConformanceStatus.AcceptedException;
+
     public async Task<NonConformance> TransitionNonConformanceAsync(int id, NcrReviewRequest request, int reviewerUserId)
     {
         var ncr = await _context.NonConformances.FirstOrDefaultAsync(n => n.Id == id)
             ?? throw new KeyNotFoundException($"Non-conformance {id} not found.");
-        var allowed = ncr.Status switch
-        {
-            NonConformanceStatus.Open => request.Status is NonConformanceStatus.UnderReview or NonConformanceStatus.CorrectiveActionRequired,
-            NonConformanceStatus.UnderReview => request.Status is NonConformanceStatus.CorrectiveActionRequired or NonConformanceStatus.AcceptedException,
-            NonConformanceStatus.CorrectiveActionRequired => request.Status is NonConformanceStatus.UnderReview or NonConformanceStatus.Resolved or NonConformanceStatus.AcceptedException,
-            NonConformanceStatus.Resolved => request.Status is NonConformanceStatus.Closed,
-            _ => false
-        };
-        if (!allowed) throw new InvalidOperationException($"NCR transition from {ncr.Status} to {request.Status} is not allowed.");
-        if (request.Status is NonConformanceStatus.Resolved or NonConformanceStatus.Closed or NonConformanceStatus.AcceptedException
-            && string.IsNullOrWhiteSpace(request.Resolution)) throw new InvalidOperationException("A resolution is required to resolve, close, or accept an exception.");
+
+        if (!IsAllowedTransition(ncr.Status, request.Status))
+            throw new InvalidOperationException($"NCR transition from {ncr.Status} to {request.Status} is not allowed.");
+
+        if (RequiresResolution(request.Status) && string.IsNullOrWhiteSpace(request.Resolution))
+            throw new InvalidOperationException("A resolution is required to resolve, close, or accept an exception.");
+
         ncr.Status = request.Status;
         ncr.ReviewNotes = request.ReviewNotes?.Trim() ?? ncr.ReviewNotes;
         ncr.ResponsibleUserId = request.ResponsibleUserId ?? ncr.ResponsibleUserId;
@@ -353,13 +445,44 @@ public class QualityInspectionService
         return ncr;
     }
 
-    public async Task<NonConformance> UpdateNonConformanceStatusAsync(int id, NonConformanceStatus newStatus)
+    /// <summary>
+    /// Status change for the simpler <c>PUT .../status</c> endpoint.
+    /// <para>
+    /// This used to assign <c>ncr.Status</c> directly, which meant a caller could
+    /// jump an NCR straight to <c>Closed</c> with no resolution, no review
+    /// metadata and no audit trail — bypassing every rule the transition endpoint
+    /// enforces. It now delegates to the same transition map and stamps the same
+    /// audit fields. The endpoint is kept because callers use it, but it is no
+    /// longer a way around the lifecycle.
+    /// </para>
+    /// </summary>
+    public async Task<NonConformance> UpdateNonConformanceStatusAsync(
+        int id, NonConformanceStatus newStatus, string? resolution = null, int? reviewerUserId = null)
     {
         var ncr = await _context.NonConformances.FindAsync(id);
         if (ncr == null)
             throw new KeyNotFoundException($"Non-conformance {id} not found.");
 
+        if (!IsAllowedTransition(ncr.Status, newStatus))
+            throw new InvalidOperationException($"NCR transition from {ncr.Status} to {newStatus} is not allowed.");
+
+        if (RequiresResolution(newStatus) && string.IsNullOrWhiteSpace(resolution))
+            throw new InvalidOperationException("A resolution is required to resolve, close, or accept an exception.");
+
         ncr.Status = newStatus;
+        if (!string.IsNullOrWhiteSpace(resolution))
+            ncr.Resolution = resolution.Trim();
+
+        if (reviewerUserId.HasValue)
+        {
+            ncr.ReviewedByUserId = reviewerUserId.Value;
+            ncr.ReviewedAt = DateTime.UtcNow;
+        }
+
+        if (newStatus == NonConformanceStatus.Resolved) ncr.ResolvedAt = DateTime.UtcNow;
+        if (newStatus == NonConformanceStatus.Closed) ncr.ClosedAt = DateTime.UtcNow;
+        ncr.UpdatedAt = DateTime.UtcNow;
+
         await _context.SaveChangesAsync();
         return ncr;
     }

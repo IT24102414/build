@@ -16,7 +16,12 @@ async function request(path, { method = 'GET', body } = {}) {
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(data?.message || `Request failed (${res.status})`)
+    // `status` and `payload` travel with the error so a form can map RFC 7807
+    // ValidationProblemDetails onto its fields instead of showing one banner.
+    const error = new Error(data?.message || `Request failed (${res.status})`)
+    error.status = res.status
+    error.payload = data
+    throw error
   }
   return data
 }

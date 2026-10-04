@@ -119,4 +119,11 @@ class ApiClient {
         )
         .timeout(timeout ?? _defaultTimeout);
   }
+
+  Future<http.Response> delete(String path, {Duration? timeout}) async {
+    final headers = await _authHeaders();
+    return _client
+        .delete(Uri.parse('$apiBaseUrl$path'), headers: headers)
+        .timeout(timeout ?? _defaultTimeout);
+  }
 }

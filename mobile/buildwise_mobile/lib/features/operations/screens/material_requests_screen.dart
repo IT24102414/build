@@ -129,12 +129,22 @@ class _MaterialRequestsScreenState extends State<MaterialRequestsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // The material is what the row is *about*, so it is
+                              // the headline. The API returns the line-ordered
+                              // `materialNames`; `itemCount` alone left the list
+                              // reading as bare "Request #77 · 1 item(s)", which
+                              // tells a site user nothing they can act on.
                               Text(
-                                request['projectName']?.toString() ?? 'Project',
+                                FieldFormat.materialRequestLabel(request),
                                 style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
+                              const SizedBox(height: 2),
+                              Text(
+                                request['projectName']?.toString() ?? 'Project',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
                               const SizedBox(height: 6),
-                              Text('Request #${request['id']} · ${request['itemCount']} item(s)'),
+                              Text('Request #${request['id']}'),
                               const SizedBox(height: 6),
                               StatusChip(
                                 label: request['status']?.toString() ?? 'Unknown',

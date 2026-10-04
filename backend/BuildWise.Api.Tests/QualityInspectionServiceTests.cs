@@ -131,6 +131,85 @@ public class QualityInspectionServiceTests
         };
     }
 
+    // ---------------------------------------------------------------- Rule 1b
+
+    [Fact]
+    public async Task CompleteInspection_Rejects_Material_Not_Received_On_The_Delivery()
+    {
+        // A material the delivery never contained cannot be inspected, even though
+        // the arithmetic is internally consistent.
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        var other = new Material
+        {
+            Name = "Unrelated Steel Bar",
+            Unit = "Tonnes",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        scenario.Db.Materials.Add(other);
+        await scenario.Db.SaveChangesAsync();
+
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, other.Id, inspected: 10m, accepted: 10m, rejected: 0m);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.CompleteInspectionAsync(inspection));
+
+        Assert.Contains("is not part of delivery", ex.Message);
+    }
+
+    [Fact]
+    public async Task CompleteInspection_Rejects_Inspected_Quantity_Above_The_Delivered_Quantity()
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        // Delivered 240; inspecting 241 is impossible.
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 241m, accepted: 241m, rejected: 0m);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.CompleteInspectionAsync(inspection));
+
+        Assert.Contains("cannot exceed the available quantity", ex.Message);
+    }
+
+    [Fact]
+    public async Task CompleteInspection_Allows_Inspecting_Exactly_The_Delivered_Quantity()
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 240m, accepted: 240m, rejected: 0m);
+
+        var completed = await service.CompleteInspectionAsync(inspection);
+
+        Assert.Equal(240m, completed.Items.Single().InspectedQuantity);
+    }
+
+    [Fact]
+    public async Task CompleteInspection_Rejects_Rejected_Above_Inspected()
+    {
+        // Defence in depth: Accepted + Rejected == Inspected already prevents this
+        // once negatives are rejected, but the named rule is asserted directly.
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        var inspection = BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 0m, accepted: 0m, rejected: 0m);
+        inspection.Items[0].InspectedQuantity = -5m;
+        inspection.Items[0].RejectedQuantity = -1m;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.CompleteInspectionAsync(inspection));
+
+        Assert.Contains("cannot be negative", ex.Message);
+    }
+
     // ---------------------------------------------------------------- Rule 1
 
     [Fact]
@@ -537,6 +616,20 @@ public class QualityInspectionServiceTests
         scenario.Db.Materials.Add(rebar);
         await scenario.Db.SaveChangesAsync();
 
+        // The inspection below covers two materials, so the rebar has to have
+        // actually arrived on the delivery: an inspection line for a material the
+        // delivery never contained is rejected (QualityInspectionService Rule 1b).
+        scenario.Db.DeliveryItems.Add(new DeliveryItem
+        {
+            DeliveryId = scenario.Delivery.Id,
+            MaterialId = rebar.Id,
+            ReceivedQuantity = 15m,
+            DamagedQuantity = 0m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        await scenario.Db.SaveChangesAsync();
+
         var inspection = new Inspection
         {
             DeliveryId = scenario.Delivery.Id,
@@ -596,7 +689,14 @@ public class QualityInspectionServiceTests
             reason: "Damaged"));
 
         var open = Assert.Single(await service.GetOpenNonConformancesAsync());
-        await service.UpdateNonConformanceStatusAsync(open.Id, NonConformanceStatus.Closed);
+
+        // The NCR is auto-raised at CorrectiveActionRequired, so reaching Closed
+        // legally takes two steps. Jumping straight to Closed is the bypass this
+        // service used to allow.
+        await service.UpdateNonConformanceStatusAsync(
+            open.Id, NonConformanceStatus.Resolved, resolution: "Batch replaced on site.");
+        await service.UpdateNonConformanceStatusAsync(
+            open.Id, NonConformanceStatus.Closed, resolution: "Close-out verified by the inspector.");
 
         Assert.Empty(await service.GetOpenNonConformancesAsync());
     }
@@ -701,8 +801,8 @@ public class QualityInspectionServiceTests
     }
 
     [Theory]
+    [InlineData(NonConformanceStatus.UnderReview)]
     [InlineData(NonConformanceStatus.Resolved)]
-    [InlineData(NonConformanceStatus.Closed)]
     public async Task UpdateNonConformanceStatus_Persists_New_Status(NonConformanceStatus newStatus)
     {
         var scenario = await SeedConfirmedDeliveryAsync();
@@ -713,11 +813,66 @@ public class QualityInspectionServiceTests
             reason: "Damaged"));
 
         var ncr = Assert.Single(await scenario.Db.NonConformances.ToListAsync());
-        var updated = await service.UpdateNonConformanceStatusAsync(ncr.Id, newStatus);
+
+        // An auto-raised NCR starts at CorrectiveActionRequired. Only the legal
+        // next steps are exercised here; the forbidden jumps are covered by
+        // UpdateNonConformanceStatus_Rejects_Forbidden_Transitions.
+        var updated = await service.UpdateNonConformanceStatusAsync(
+            ncr.Id, newStatus, resolution: "Replaced on site and verified.");
 
         Assert.Equal(newStatus, updated.Status);
 
         var reloaded = await scenario.Db.NonConformances.FindAsync(ncr.Id);
         Assert.Equal(newStatus, reloaded!.Status);
+    }
+
+    /// <summary>
+    /// The PUT .../status endpoint used to assign the status directly, which let a
+    /// caller jump an NCR straight to Closed. It now obeys the same lifecycle as
+    /// POST .../transition, so a bypass attempt is refused here too.
+    /// </summary>
+    [Theory]
+    [InlineData(NonConformanceStatus.Closed)]
+    [InlineData(NonConformanceStatus.Open)]
+    public async Task UpdateNonConformanceStatus_Rejects_Forbidden_Transitions(NonConformanceStatus forbidden)
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        await service.CompleteInspectionAsync(BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 240m, accepted: 235m, rejected: 5m,
+            reason: "Damaged"));
+
+        var ncr = Assert.Single(await scenario.Db.NonConformances.ToListAsync());
+        var original = ncr.Status;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.UpdateNonConformanceStatusAsync(
+                ncr.Id, forbidden, resolution: "Attempted bypass."));
+
+        Assert.Contains("is not allowed", ex.Message);
+
+        var reloaded = await scenario.Db.NonConformances.FindAsync(ncr.Id);
+        Assert.Equal(original, reloaded!.Status);
+    }
+
+    [Fact]
+    public async Task UpdateNonConformanceStatus_Requires_A_Resolution_For_Resolved()
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+
+        await service.CompleteInspectionAsync(BuildInspection(
+            scenario.Delivery.Id, scenario.Material.Id, inspected: 240m, accepted: 235m, rejected: 5m,
+            reason: "Damaged"));
+
+        var ncr = Assert.Single(await scenario.Db.NonConformances.ToListAsync());
+
+        // CorrectiveActionRequired -> Resolved is a legal move, but it still needs
+        // a written resolution.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.UpdateNonConformanceStatusAsync(ncr.Id, NonConformanceStatus.Resolved, resolution: "  "));
+
+        Assert.Contains("resolution is required", ex.Message);
     }
 }

@@ -8,13 +8,19 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/web_only_notice_screen.dart';
 import 'features/auth/services/auth_service.dart';
+import 'features/operations/screens/administration_screen.dart';
 import 'features/operations/screens/agent_workflows_screen.dart';
+import 'features/operations/screens/approvals_screen.dart';
 import 'features/operations/screens/delivery_receiving_screen.dart';
 import 'features/operations/screens/field_workspace_screen.dart';
 import 'features/operations/screens/material_requests_screen.dart';
 import 'features/operations/screens/quality_inspection_screen.dart';
 import 'features/operations/services/operations_service.dart';
 import 'features/procurement/screens/procurement_home_screen.dart';
+import 'features/procurement/screens/purchase_orders_screen.dart';
+import 'features/procurement/screens/quotation_comparison_screen.dart';
+import 'features/procurement/screens/quotation_entry_screen.dart';
+import 'features/procurement/screens/rfq_screen.dart';
 import 'features/procurement/services/notification_service.dart';
 
 void main() => runApp(const BuildWiseApp());
@@ -33,13 +39,18 @@ class BuildWiseApp extends StatelessWidget {
 /// Shows the sign-in screen until a JWT is present in secure storage, then
 /// hands off to the main app shell (spec section 8: "protected screens").
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key});
+  const AuthGate({super.key, this.authService, this.operationsService});
   @override
   State<AuthGate> createState() => _AuthGateState();
+
+  /// Injectable only so the sign-in / sign-out transition can be covered by
+  /// tests. Production code omits it and gets the default service.
+  final AuthService? authService;
+  final OperationsService? operationsService;
 }
 
 class _AuthGateState extends State<AuthGate> {
-  final _authService = AuthService();
+  late final AuthService _authService = widget.authService ?? AuthService();
   late Future<bool> _signedInFuture;
 
   @override
@@ -48,8 +59,27 @@ class _AuthGateState extends State<AuthGate> {
     _signedInFuture = _authService.isSignedIn();
   }
 
-  void _handleSignedIn() => setState(() => _signedInFuture = Future.value(true));
-  void _handleSignedOut() => setState(() => _signedInFuture = Future.value(false));
+    // These must use a block body, not `() => _signedInFuture = ...`.
+  // An arrow function whose body is an assignment expression evaluates to the
+  // *assigned value*, so `setState` would receive a `Future` as the result of
+  // its `VoidCallback` and throw "setState() callback argument returned a
+  // Future". A block body returns void, which is what setState requires.
+  // These must use a block body, not `() => _signedInFuture = ...`.
+  // An arrow function whose body is an assignment expression evaluates to the
+  // *assigned value*, so `setState` would receive a `Future` as the result of
+  // its `VoidCallback` and throw "setState() callback argument returned a
+  // Future". A block body returns void, which is what setState requires.
+  void _handleSignedIn() {
+    setState(() {
+      _signedInFuture = Future.value(true);
+    });
+  }
+
+  void _handleSignedOut() {
+    setState(() {
+      _signedInFuture = Future.value(false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) => FutureBuilder<bool>(
@@ -59,7 +89,11 @@ class _AuthGateState extends State<AuthGate> {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
       if (snapshot.data == true) {
-        return MainAppShell(onSignOut: _handleSignedOut);
+        return MainAppShell(
+          onSignOut: _handleSignedOut,
+          authService: _authService,
+          operationsService: widget.operationsService,
+        );
       }
       return LoginScreen(onSignedIn: _handleSignedIn, authService: _authService);
     },
@@ -67,8 +101,18 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 class MainAppShell extends StatefulWidget {
-  const MainAppShell({super.key, required this.onSignOut});
+  const MainAppShell({
+    super.key,
+    required this.onSignOut,
+    this.authService,
+    this.operationsService,
+  });
   final VoidCallback onSignOut;
+
+  /// Injectable only so session-dependent chrome can be tested. Production
+  /// code omits it and gets the default service.
+  final AuthService? authService;
+  final OperationsService? operationsService;
 
   @override
   State<MainAppShell> createState() => _MainAppShellState();
@@ -78,8 +122,9 @@ class _MainAppShellState extends State<MainAppShell>
     implements WorkspaceNavigator {
   int selectedIndex = 0;
   List<String> _roles = const [];
-  final _authService = AuthService();
-  final _operationsService = OperationsService();
+  late final AuthService _authService = widget.authService ?? AuthService();
+  late final OperationsService _operationsService =
+      widget.operationsService ?? OperationsService();
   Timer? _notificationTimer;
   int _unreadNotifications = 0;
   final Set<int> _notifiedNotificationIds = <int>{};
@@ -114,9 +159,9 @@ class _MainAppShellState extends State<MainAppShell>
   }
 
   Future<void> _pollNotifications({required bool showDeviceNotification}) async {
-    // The notifications API is internal-staff only, and a web-only procurement
-    // role has no mobile surface to surface a notification on.
-    if (!BuildWiseRoles.canUseMobileApp(_roles)) return;
+    // The notifications API is internal-staff only, and an account that resolved
+    // to no internal role has no mobile surface to surface a notification on.
+    if (!BuildWiseRoles.isInternalStaff(_roles)) return;
     try {
       final rows = await _operationsService.listNotifications(unreadOnly: true);
       if (!mounted) return;
@@ -139,7 +184,7 @@ class _MainAppShellState extends State<MainAppShell>
   }
 
   Future<void> _openNotifications() async {
-    if (!BuildWiseRoles.canUseMobileApp(_roles)) {
+    if (!BuildWiseRoles.isInternalStaff(_roles)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Notifications are available on the BuildWise web app.'),
@@ -183,7 +228,7 @@ class _MainAppShellState extends State<MainAppShell>
 
   bool _has(Set<String> roles) => roles.any(_roles.contains);
 
-  /// Human-readable name for a role, used by the web-only notice.
+  /// Human-readable name for a role, shown in the app bar.
   static String _roleLabel(String role) => switch (role) {
         BuildWiseRoles.procurementOfficer => 'Procurement Officer',
         BuildWiseRoles.procurementManager => 'Procurement Manager',
@@ -194,22 +239,20 @@ class _MainAppShellState extends State<MainAppShell>
         _ => 'Administrator',
       };
 
-  /// The mobile app is a field operations tool. These roles do desk, approval
-  /// or governance work on the web application, so they get an explainer here
-  /// instead of a half-built set of screens.
-  String get _primaryWebOnlyRole {
+  /// This session's role, for display. Null when the account holds no internal
+  /// role, since there is nothing meaningful to name.
+  String? get _sessionRoleLabel {
     for (final role in _roles) {
-      if (BuildWiseRoles.webOnly.contains(role)) return _roleLabel(role);
+      return _roleLabel(role);
     }
-    return 'Your';
+    return null;
   }
 
-  /// The single field role this session represents.
+  /// The single field role this session represents, used by the field workspace.
   ///
-  /// Only the three field roles reach the mobile shell (see
-  /// `core/auth/buildwise_roles.dart`), so this always resolves to one of them.
-  /// An account holding more than one field role uses its first, matching the
-  /// precedence already applied when building the navigation.
+  /// A desk-only account (Procurement Officer, Administrator) has no field work
+  /// and never reaches `FieldWorkspaceScreen`; this returns a safe default for
+  /// the mixed case where one account holds both a desk and a field role.
   String get _fieldRole {
     for (final role in <String>[
       BuildWiseRoles.siteEngineer,
@@ -221,30 +264,35 @@ class _MainAppShellState extends State<MainAppShell>
     return BuildWiseRoles.siteEngineer;
   }
 
-  /// The destination label holding this role's work, used by the workspace home
-  /// to hand off to the right tab.
+  /// The destination label holding this role's work, used by the field
+  /// workspace to hand off to the right tab.
   String get _workspaceLabel {
     if (_has({BuildWiseRoles.siteEngineer})) return 'Requests';
     if (_has({BuildWiseRoles.siteOfficer})) return 'Deliveries';
     return 'Inspections';
   }
 
-  /// Role sets live in `core/auth/buildwise_roles.dart` so this shell and the
-  /// backend policy grants cannot disagree about who sees which screen.
+  /// The tabs this session can open, derived from its roles.
+  ///
+  /// Each tab is gated on a capability set in `core/auth/buildwise_roles.dart`,
+  /// so the visible menu and the API's own authorization cannot disagree: a
+  /// non-approver is never shown Approve, and a non-procurement role is never
+  /// shown a supplier price. The API remains the authority — this only decides
+  /// what is drawn.
   ///
   /// There is no supplier branch, because a supplier is not a BuildWise user.
   /// Suppliers are external parties contacted by email; the procurement officer
-  /// emails them an RFQ and keys in the quotations they send back. None of that
-  /// is a mobile surface, so there is nothing here for a supplier to reach.
+  /// emails them an RFQ and keys in the quotations they send back.
   List<_MobileDestination> get _destinations {
-    // Not an internal role (or a web-only one): show the explainer, not the app.
-    if (!BuildWiseRoles.canUseMobileApp(_roles)) {
+    // A claim that resolved to no internal role (a stray `Supplier`, say) has no
+    // surface on either client. Show the explainer rather than an empty shell.
+    if (!BuildWiseRoles.isInternalStaff(_roles)) {
       return [
         _MobileDestination(
           label: 'Web App',
           icon: Icons.laptop_mac_outlined,
           selectedIcon: Icons.laptop_mac,
-          builder: (_) => WebOnlyNoticeScreen(roleLabel: _primaryWebOnlyRole),
+          builder: (_) => WebOnlyNoticeScreen(roleLabel: 'This account'),
         ),
       ];
     }
@@ -254,14 +302,14 @@ class _MainAppShellState extends State<MainAppShell>
         label: 'Home',
         icon: Icons.home_outlined,
         selectedIcon: Icons.home,
-        // The field workspace, not the React dashboard: it answers "what do I
-        // need to do now?" for whichever of the three field roles signed in.
-        builder: (_) => FieldWorkspaceScreen(role: _fieldRole),
+        builder: (_) => _homeScreen(),
       ),
     ];
 
-    // Site Engineer raises material requests. Approval is a Site Manager job on
-    // the web app, so the engineer only ever creates and tracks.
+    // --- Field execution -------------------------------------------------
+    // The Site Engineer raises and tracks material requests. The Site Officer
+    // receives physical deliveries against a confirmed PO. The Quality
+    // Inspector runs the five-point checklist and raises NCRs.
     if (_has({BuildWiseRoles.siteEngineer})) {
       destinations.add(
         _MobileDestination(
@@ -273,7 +321,6 @@ class _MainAppShellState extends State<MainAppShell>
       );
     }
 
-    // Site Officer receives the delivery against a confirmed purchase order.
     if (_has({BuildWiseRoles.siteOfficer})) {
       destinations.add(
         _MobileDestination(
@@ -285,20 +332,6 @@ class _MainAppShellState extends State<MainAppShell>
       );
     }
 
-    // Read-only procurement progress, so the engineer can answer "what happened
-    // to my request?" without ever seeing supplier names or prices.
-    if (_has({BuildWiseRoles.siteEngineer, BuildWiseRoles.siteOfficer})) {
-      destinations.add(
-        _MobileDestination(
-          label: 'Status',
-          icon: Icons.route_outlined,
-          selectedIcon: Icons.route,
-          builder: (_) => const ProcurementHomeScreen(siteScoped: true),
-        ),
-      );
-    }
-
-    // Quality Inspector: the five-point checklist and the NCR register.
     if (_has({BuildWiseRoles.qualityInspector})) {
       destinations.add(
         _MobileDestination(
@@ -310,8 +343,91 @@ class _MainAppShellState extends State<MainAppShell>
       );
     }
 
+    // --- Approval gate ---------------------------------------------------
+    // The human decision a manager makes on someone else's request. The same
+    // screen the web app uses, so the gate behaves identically on both clients.
+    if (_has(BuildWiseRoles.approvers)) {
+      destinations.add(
+        _MobileDestination(
+          label: 'Approvals',
+          icon: Icons.how_to_reg_outlined,
+          selectedIcon: Icons.how_to_reg,
+          builder: (_) => const ApprovalsScreen(),
+        ),
+      );
+    }
+
+    // --- Procurement desk ------------------------------------------------
+    // RFQs go out by email to supplier contact records; quotations come back
+    // by email and are keyed in here, then ranked by the quotation agent
+    // (:8001) and approved by a human before any purchase order exists.
+    if (_has(BuildWiseRoles.procurementDesk)) {
+      destinations.add(
+        _MobileDestination(
+          label: 'RFQs',
+          icon: Icons.mark_email_read_outlined,
+          selectedIcon: Icons.mark_email_read,
+          builder: (_) => const RfqScreen(),
+        ),
+      );
+      destinations.add(
+        _MobileDestination(
+          label: 'Quotations',
+          icon: Icons.compare_arrows_outlined,
+          selectedIcon: Icons.compare_arrows,
+          builder: (_) => const QuotationComparisonScreen(),
+        ),
+      );
+      // Keying in what a supplier returned by email — the mobile counterpart of
+      // the web app's QuotationEntryForm, on the same endpoint.
+      destinations.add(
+        _MobileDestination(
+          label: 'Record',
+          icon: Icons.post_add_outlined,
+          selectedIcon: Icons.post_add,
+          builder: (_) => const QuotationEntryScreen(),
+        ),
+      );
+      // The purchase order register. Reporting only: an order exists because a
+      // manager approved a workflow, never because this screen was used.
+      destinations.add(
+        _MobileDestination(
+          label: 'Orders',
+          icon: Icons.receipt_long_outlined,
+          selectedIcon: Icons.receipt_long,
+          builder: (_) => const PurchaseOrdersScreen(),
+        ),
+      );
+    }
+
+    // Read-only procurement progress for the site roles, so the engineer can
+    // answer "what happened to my request?" without ever seeing supplier names
+    // or prices.
+    if (_has({BuildWiseRoles.siteEngineer, BuildWiseRoles.siteOfficer})) {
+      destinations.add(
+        _MobileDestination(
+          label: 'Status',
+          icon: Icons.route_outlined,
+          selectedIcon: Icons.route,
+          builder: (_) => const ProcurementHomeScreen(siteScoped: true),
+        ),
+      );
+    }
+
+    // --- Governance ------------------------------------------------------
+    if (_has(BuildWiseRoles.governance)) {
+      destinations.add(
+        _MobileDestination(
+          label: 'Admin',
+          icon: Icons.admin_panel_settings_outlined,
+          selectedIcon: Icons.admin_panel_settings,
+          builder: (_) => const AdministrationScreen(),
+        ),
+      );
+    }
+
     // Agent workflow history: which agents ran and what they recommended.
-    // Read-only for every field role — it starts no workflow.
+    // Read-only for every role — it starts no workflow.
     destinations.add(
       _MobileDestination(
         label: 'Agents',
@@ -324,12 +440,33 @@ class _MainAppShellState extends State<MainAppShell>
     return destinations;
   }
 
+  /// The home tab. Field roles get the "what do I do now?" workspace; desk roles
+  /// get the procurement overview, which is the equivalent question for them.
+  Widget _homeScreen() {
+    if (_has(BuildWiseRoles.procurementDesk)) {
+      return ProcurementHomeScreen(siteScoped: false);
+    }
+    if (_has(BuildWiseRoles.approvers)) {
+      return const ApprovalsScreen();
+    }
+    return FieldWorkspaceScreen(role: _fieldRole);
+  }
+
+  /// Maps a web application route onto the mobile tab that carries the same
+  /// work, so a deep link from the web app lands somewhere equivalent.
   void openRoute(String route) {
     final label = switch (route) {
-      '/material-requests' => 'Requests',
+      '/material-requests' =>
+        _has({BuildWiseRoles.siteEngineer}) ? 'Requests' : 'Approvals',
       '/deliveries' => 'Deliveries',
       '/quality-inspections' => 'Inspections',
-      '/procurement' || '/quotations' || '/purchase-orders' => 'Status',
+      '/non-conformances' => 'Inspections',
+      '/admin' => 'Admin',
+      '/rfqs' => 'RFQs',
+      '/quotations' => 'Quotations',
+      '/suppliers' => 'RFQs',
+      '/purchase-orders' => 'Quotations',
+      '/procurement' => _has(BuildWiseRoles.procurementDesk) ? 'Home' : 'Status',
       '/agent-workflows' => 'Agents',
       _ => 'Home',
     };
@@ -367,7 +504,20 @@ class _MainAppShellState extends State<MainAppShell>
       final safeIndex = selectedIndex.clamp(0, destinations.length - 1);
       return Scaffold(
         appBar: AppBar(
-          title: const Text('BuildWise'),
+          // All seven roles share this shell, so the signed-in role is shown up
+          // top. It explains at a glance why a given set of tabs is visible.
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('BuildWise'),
+              if (_sessionRoleLabel != null)
+                Text(
+                  _sessionRoleLabel!,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+            ],
+          ),
           actions: [
             Badge(
               isLabelVisible: _unreadNotifications > 0,

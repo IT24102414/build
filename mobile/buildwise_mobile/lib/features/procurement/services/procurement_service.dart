@@ -47,6 +47,48 @@ class ProcurementService {
     return _list(response, 'load quotations');
   }
 
+  /// Records what a supplier quoted, for every line the officer chooses to price.
+  ///
+  /// Mirrors the web app's `procurementApi.createQuotation` exactly — same
+  /// endpoint, same `CreateQuotationDto` shape — so a quotation keyed in on a
+  /// phone is indistinguishable from one keyed in on the web.
+  ///
+  /// The API, not this client, decides whether the supplier is eligible. The
+  /// validation here only stops obviously invalid input reaching the server.
+  Future<Map<String, dynamic>> createQuotation(
+    int requestId, {
+    required int supplierId,
+    required String quotationDate,
+    required String validUntil,
+    required List<Map<String, dynamic>> items,
+    String? promisedDeliveryDate,
+    int? rfqId,
+    double transportCharge = 0,
+    String? paymentTerms,
+  }) async {
+    final response = await _apiClient.post(
+      '/material-requests/$requestId/quotations',
+      body: {
+        'supplierId': supplierId,
+        'quotationDate': quotationDate,
+        'validUntil': validUntil,
+        'promisedDeliveryDate': promisedDeliveryDate,
+        'rfqId': rfqId,
+        'transportCharge': transportCharge,
+        'paymentTerms': paymentTerms,
+        'items': items,
+      },
+    );
+    return _object(response, 'save quotation');
+  }
+
+  Future<void> deleteQuotation(int id) async {
+    final response = await _apiClient.delete('/quotations/$id');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_error(response, 'Could not delete quotation'));
+    }
+  }
+
   /// Side-by-side comparison of every offer against the requested quantity.
   ///
   /// `coversFullQuantity` comes from the API, so the mobile client does not
@@ -118,9 +160,43 @@ class ProcurementService {
 
   // ------------------------------------------------------ purchase orders
 
-  Future<Map<String, dynamic>> listPurchaseOrders({int page = 1, int pageSize = 20}) async {
-    final response = await _apiClient.get('/purchase-orders?page=$page&pageSize=$pageSize');
+  /// Purchase orders created from an approved procurement decision.
+  ///
+  /// Mirrors the web app's Purchase Orders list: same endpoint, same status
+  /// filter. A purchase order only ever exists because a manager approved a
+  /// workflow at the human gate — the quotation agent recommends, and
+  /// [createPurchaseOrderFromWorkflow] is the step that turns an approved
+  /// workflow into a real order. Nothing on this screen creates one directly.
+  Future<List<Map<String, dynamic>>> listPurchaseOrders({
+    int page = 1,
+    int pageSize = 20,
+    String? status,
+    String? search,
+  }) async {
+    final query = <String>['page=$page', 'pageSize=$pageSize'];
+    if (status != null && status.isNotEmpty) query.add('status=$status');
+    if (search != null && search.isNotEmpty) query.add('search=$search');
+    final response = await _apiClient.get('/purchase-orders?${query.join('&')}');
+    return _list(response, 'load purchase orders');
+  }
+
+  /// The paged envelope the web list renders, kept for the count and paging.
+  Future<Map<String, dynamic>> listPurchaseOrdersPage({
+    int page = 1,
+    int pageSize = 20,
+    String? status,
+    String? search,
+  }) async {
+    final query = <String>['page=$page', 'pageSize=$pageSize'];
+    if (status != null && status.isNotEmpty) query.add('status=$status');
+    if (search != null && search.isNotEmpty) query.add('search=$search');
+    final response = await _apiClient.get('/purchase-orders?${query.join('&')}');
     return _object(response, 'load purchase orders');
+  }
+
+  Future<Map<String, dynamic>> getPurchaseOrder(int id) async {
+    final response = await _apiClient.get('/purchase-orders/$id');
+    return _object(response, 'load purchase order');
   }
 
   Future<Map<String, dynamic>> createPurchaseOrderFromWorkflow(int workflowId) async {

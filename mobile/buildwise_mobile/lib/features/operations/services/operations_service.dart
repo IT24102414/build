@@ -170,17 +170,33 @@ class OperationsService {
     return _map(response, 'load material request');
   }
 
-  /// Approve or reject a material request (ProcurementManager / Administrator).
+  /// Approve, Reject, or Request Revision (SiteManager / ProcurementManager /
+  /// Administrator).
+  ///
+  /// Posts to `/approval` — the same endpoint the web app's
+  /// `qualityApi.decideMaterialRequest` uses. This previously posted to
+  /// `/decision`, which does not exist and returned **404**, so every tap on
+  /// Approve or Reject silently failed.
+  ///
+  /// The server requires a comment for `Rejected` and `RevisionRequested`, so
+  /// callers must supply one; the UI prompts before calling.
   Future<Map<String, dynamic>> decideMaterialRequest(
     int id, {
     required String decision,
-    String comments = '',
+    String? comments,
   }) async {
     final response = await _apiClient.post(
-      '/material-requests/$id/decision',
+      '/material-requests/$id/approval',
       body: {'decision': decision, 'comments': comments},
     );
     return _map(response, 'record decision');
+  }
+
+  /// The full request, including its line items. The summary DTO carries only a
+  /// count, so an approver reviewing "what the site asked for" needs this.
+  Future<Map<String, dynamic>> getMaterialRequestDetail(int id) async {
+    final response = await _apiClient.get('/material-requests/$id');
+    return _map(response, 'load material request');
   }
 
   /// Agent workflow runs, newest first. The backend returns a paged envelope.

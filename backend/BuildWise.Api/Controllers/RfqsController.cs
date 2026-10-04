@@ -65,8 +65,17 @@ public class RfqsController : ControllerBase
         if (request is null) return NotFound(new { message = $"Material request #{dto.MaterialRequestId} not found." });
         if (request.Status != MaterialRequestStatus.Approved)
             return BadRequest(new { message = "RFQs can only be issued for Approved material requests." });
-        if (dto.RequiredResponseDate < DateOnly.FromDateTime(DateTime.UtcNow))
-            return BadRequest(new { message = "Required response date cannot be in the past." });
+
+        // Response date must be strictly after today (today leaves suppliers no
+        // time to respond) and no later than the date the material is needed on
+        // site — an RFQ that stays open past the deadline cannot produce a usable
+        // quotation.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (dto.RequiredResponseDate <= today)
+            return BadRequest(new { message = $"Required response date must be after today ({today:yyyy-MM-dd})." });
+        if (request.RequiredDate != default && dto.RequiredResponseDate > request.RequiredDate)
+            return BadRequest(new { message = $"Required response date '{dto.RequiredResponseDate:yyyy-MM-dd}' cannot be later than the material required date '{request.RequiredDate:yyyy-MM-dd}'." });
+
         if (dto.SupplierIds is null || dto.SupplierIds.Count == 0)
             return BadRequest(new { message = "Select at least one supplier for the RFQ." });
 

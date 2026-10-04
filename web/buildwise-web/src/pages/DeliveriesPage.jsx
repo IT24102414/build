@@ -5,6 +5,7 @@ import {
   Drawer,
   EmptyState,
   ErrorState,
+  FormErrorSummary,
   LoadingState,
   PageHeader,
   SelectInput,
@@ -12,6 +13,7 @@ import {
   TextInput,
 } from '../components/shared'
 import { qualityApi } from '../services/qualityApi'
+import { describeApiFailure } from '../services/validationErrors'
 import { useAuth } from '../auth/AuthContext'
 import './common/common.css'
 import './DeliveriesPage.css'
@@ -114,6 +116,7 @@ export default function DeliveriesPage() {
         open={selectedDelivery != null}
         title={selectedDelivery ? `Delivery #${selectedDelivery.id}` : ''}
         subtitle={selectedDelivery?.deliveryReference ?? ''}
+        placement="center"
         onClose={closeDetail}
       >
         {selectedDelivery && <DeliveryDetail delivery={selectedDelivery} />}
@@ -231,6 +234,11 @@ function ReceiveDeliveryForm({ orders, userName, onRecorded }) {
   const [lines, setLines] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
+  // Backend field errors (from RFC 7807 ValidationProblemDetails) shown beside
+  // the offending input. Client-side checks below give instant feedback; these
+  // are authoritative and cover rules the browser cannot know, such as the
+  // cumulative quantity across earlier deliveries for this purchase order.
+  const [fieldErrors, setFieldErrors] = useState({})
   const selectedOrder = orders.find((po) => String(po.id) === form.purchaseOrderId)
   function update(field, value) { setForm((current) => ({ ...current, [field]: value })) }
   function updateLine(materialId, field, value) { setLines((current) => ({ ...current, [materialId]: { ...current[materialId], [field]: value } })) }
@@ -238,18 +246,42 @@ function ReceiveDeliveryForm({ orders, userName, onRecorded }) {
   async function handleSubmit(event) {
     event.preventDefault()
     setSubmitError(null)
+    setFieldErrors({})
     if (!selectedOrder?.items?.length) { setSubmitError('Select a confirmed purchase order with at least one line item.'); return }
-    const items = selectedOrder.items.map((item) => ({ materialId: item.materialId, receivedQuantity: Number(lines[item.materialId]?.receivedQuantity ?? 0), damagedQuantity: Number(lines[item.materialId]?.damagedQuantity ?? 0) }))
-    if (items.some((item) => item.receivedQuantity < 0 || item.damagedQuantity < 0 || item.damagedQuantity > item.receivedQuantity)) {
-      setSubmitError('Received and damaged quantities cannot be negative, and damaged cannot exceed received.')
+
+    // Immediate client-side feedback. These mirror the backend rules but are not
+    // trusted for correctness - the server re-checks every one of them.
+    const lineErrors = {}
+    const items = selectedOrder.items.map((item) => {
+      const receivedQuantity = Number(lines[item.materialId]?.receivedQuantity ?? 0)
+      const damagedQuantity = Number(lines[item.materialId]?.damagedQuantity ?? 0)
+      const materialId = item.materialId
+      if (receivedQuantity < 0) lineErrors[`received-${materialId}`] = 'Received quantity cannot be negative.'
+      else if (receivedQuantity > Number(item.orderedQuantity)) lineErrors[`received-${materialId}`] = `Received quantity cannot exceed the ordered quantity (${formatNumber(item.orderedQuantity)}).`
+      if (damagedQuantity < 0) lineErrors[`damaged-${materialId}`] = 'Damaged quantity cannot be negative.'
+      else if (damagedQuantity > receivedQuantity) lineErrors[`damaged-${materialId}`] = 'Damaged quantity cannot exceed received quantity.'
+      return { materialId, receivedQuantity, damagedQuantity }
+    })
+
+    const nextFieldErrors = {}
+    if (!form.deliveryReference.trim()) nextFieldErrors.deliveryReference = 'Enter the supplier delivery reference or invoice number.'
+    if (Object.keys(lineErrors).length > 0 || Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors({ ...nextFieldErrors, ...lineErrors })
       return
     }
-    if (!form.deliveryReference.trim()) { setSubmitError('Enter the supplier delivery reference or invoice number.'); return }
+
     setSubmitting(true)
     try {
       const created = await qualityApi.recordDelivery({ purchaseOrderId: selectedOrder.id, deliveryReference: form.deliveryReference.trim(), items })
       setForm(EMPTY_FORM); setLines({}); onRecorded(created)
-    } catch (err) { setSubmitError(err.message) } finally { setSubmitting(false) }
+    } catch (err) {
+      // Map the API failure onto fields where possible. A rule that names a
+      // material line is attached to that line's input; anything else stays in
+      // the summary banner. Entered values are deliberately left intact.
+      const described = describeApiFailure(err)
+      setSubmitError(described.general)
+      setFieldErrors(mapDeliveryFieldErrors(described, selectedOrder))
+    } finally { setSubmitting(false) }
   }
 
   return (
@@ -257,12 +289,15 @@ function ReceiveDeliveryForm({ orders, userName, onRecorded }) {
       {/* The drawer supplies the title; only the recorder attribution is
           specific to this form. */}
       {userName && <p className="delivery-recorder">Received by {initials(userName)}</p>}
-      {submitError && <ErrorState title="Delivery could not be recorded" message={submitError} />}
+      {/* Field-level messages render beside their inputs. The summary repeats
+          them in one place because rules such as the cumulative quantity span
+          more than one field. */}
+      <FormErrorSummary general={submitError} fieldErrors={fieldErrors} />
       <form onSubmit={handleSubmit} className="delivery-form">
         <Card>
           <div className="form-grid">
             <SelectInput label="Confirmed purchase order" id="purchaseOrderId" required value={form.purchaseOrderId} onChange={(e) => update('purchaseOrderId', e.target.value)} options={[{ value: '', label: 'Select a purchase order' }, ...orders.map((po) => ({ value: po.id, label: `PO-${po.id} Â· ${po.items?.length ?? 0} line(s)` }))]} />
-            <TextInput label="Delivery reference / invoice" id="deliveryReference" required value={form.deliveryReference} onChange={(e) => update('deliveryReference', e.target.value)} placeholder="e.g. INV-9081" />
+            <TextInput label="Delivery reference / invoice" id="deliveryReference" required value={form.deliveryReference} error={fieldErrors.deliveryReference} onChange={(e) => update('deliveryReference', e.target.value)} placeholder="e.g. INV-9081" />
           </div>
         </Card>
         <Card title="Received line items" subtitle="Enter actual site quantities for the selected order.">
@@ -272,8 +307,8 @@ function ReceiveDeliveryForm({ orders, userName, onRecorded }) {
                 <div><strong>{item.materialName ?? `Material #${item.materialId}`}</strong><small>Ordered: {formatNumber(item.orderedQuantity)} {item.unit ?? 'units'}</small></div>
                 {/* max mirrors the backend rule Received <= Ordered, so an
                     over-receipt is caught in the browser as well as server-side. */}
-                <TextInput id={`received-${item.materialId}`} label="Received" type="number" min="0" max={item.orderedQuantity} step="0.01" value={lines[item.materialId]?.receivedQuantity ?? ''} onChange={(e) => updateLine(item.materialId, 'receivedQuantity', e.target.value)} />
-                <TextInput id={`damaged-${item.materialId}`} label="Damaged" type="number" min="0" step="0.01" value={lines[item.materialId]?.damagedQuantity ?? ''} onChange={(e) => updateLine(item.materialId, 'damagedQuantity', e.target.value)} />
+                <TextInput id={`received-${item.materialId}`} label="Received" type="number" min="0" max={item.orderedQuantity} step="0.01" error={fieldErrors[`received-${item.materialId}`]} value={lines[item.materialId]?.receivedQuantity ?? ''} onChange={(e) => updateLine(item.materialId, 'receivedQuantity', e.target.value)} />
+                <TextInput id={`damaged-${item.materialId}`} label="Damaged" type="number" min="0" step="0.01" error={fieldErrors[`damaged-${item.materialId}`]} value={lines[item.materialId]?.damagedQuantity ?? ''} onChange={(e) => updateLine(item.materialId, 'damagedQuantity', e.target.value)} />
               </div>
             ))}</div>
           )}
@@ -285,6 +320,45 @@ function ReceiveDeliveryForm({ orders, userName, onRecorded }) {
       </form>
     </section>
   )
+}
+
+/**
+ * Attaches a backend delivery message to the specific line input it belongs to.
+ *
+ * The API reports quantity rules in prose ("Received quantity cannot exceed the
+ * ordered quantity. Ordered 250, received 300.") rather than naming a field, so
+ * the line is identified from the material id the server echoes back. Anything
+ * that cannot be attributed stays in the summary banner rather than being
+ * attached to an arbitrary input.
+ */
+function mapDeliveryFieldErrors(described, selectedOrder) {
+  const errors = {}
+  const message = described.general || ''
+  if (!message) return errors
+
+  const isReceivedMessage = /received quantity/i.test(message)
+  const isDamagedMessage = /damaged quantity/i.test(message)
+  if (!isReceivedMessage && !isDamagedMessage) {
+    // A reference or purchase-order rule belongs to the input at the top.
+    if (/delivery reference/i.test(message)) errors.deliveryReference = message
+    return errors
+  }
+
+  const materialIds = selectedOrder?.items?.map((item) => item.materialId) ?? []
+  for (const materialId of materialIds) {
+    if (new RegExp(`material(?:\\s+id)?\\s+${materialId}\\b`, 'i').test(message)
+      || new RegExp(`material\\s+#?${materialId}\\b`, 'i').test(message)) {
+      errors[isDamagedMessage ? `damaged-${materialId}` : `received-${materialId}`] = message
+      return errors
+    }
+  }
+
+  // No material id in the message: it applies to the order as a whole, so show it
+  // on every line's quantity field rather than guessing one line.
+  for (const materialId of materialIds) {
+    errors[isDamagedMessage ? `damaged-${materialId}` : `received-${materialId}`] = message
+  }
+  return errors
 }
 
 // ------------------------------------------------------------------ Detail

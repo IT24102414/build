@@ -29,8 +29,12 @@ public class AuthService
         if (string.IsNullOrWhiteSpace(dto.FullName) || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password))
             throw new ArgumentException("Full name, email and password are all required.");
 
-        if (dto.Password.Length < 8)
-            throw new ArgumentException("Password must be at least 8 characters long.");
+        // Same rules as the administrator console - see AccountRules.
+        if (!AccountRules.IsValidEmail(dto.Email))
+            throw new ArgumentException($"'{dto.Email}' is not a valid email address.");
+
+        if (!AccountRules.IsValidPassword(dto.Password))
+            throw new ArgumentException(AccountRules.PasswordRequirementMessage);
 
         var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
 

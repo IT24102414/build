@@ -80,6 +80,22 @@
 .app-drawer__close-btn:active {
   transform: rotate(90deg) scale(0.95);
 }
+/* Failed-submit banner for forms. Distinct from the page-level error state:
+   it sits inside a form and lists the individual problems to correct. */
+.form-error-summary {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  border-left: 4px solid #dc2626;
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  color: #7f1d1d;
+}
+.form-error-summary__title { display: block; margin-bottom: var(--space-1); }
+.form-error-summary__general { margin: 0 0 var(--space-2); }
+.form-error-summary__list { margin: 0; padding-left: var(--space-5); }
+.form-error-summary__list li { margin-bottom: 0.15rem; }
+
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .dialog-backdrop, .dialog { animation: none; } }

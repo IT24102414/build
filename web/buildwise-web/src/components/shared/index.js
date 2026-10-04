@@ -10,6 +10,7 @@ export { default as ErrorState } from './ErrorState'
 export { default as ConfirmDialog } from './ConfirmDialog'
 export { default as PageHeader } from './PageHeader'
 export { default as Drawer } from './Drawer'
+export { default as FormErrorSummary } from './FormErrorSummary'
 export { default as Pagination } from './Pagination'
 export {
   MATERIAL_REQUEST_TONES,

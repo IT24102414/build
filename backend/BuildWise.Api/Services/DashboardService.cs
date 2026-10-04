@@ -1,4 +1,4 @@
-using BuildWise.Api.Data;
+﻿using BuildWise.Api.Data;
 using BuildWise.Api.DTOs;
 using BuildWise.Api.Models.Entities;
 using BuildWise.Api.Models.Enums;
@@ -9,7 +9,13 @@ namespace BuildWise.Api.Services;
 public sealed class DashboardService
 {
     private readonly ApplicationDbContext _db;
-    public DashboardService(ApplicationDbContext db) => _db = db;
+    private readonly ActivityFormatter _activityFormatter;
+
+    public DashboardService(ApplicationDbContext db, ActivityFormatter activityFormatter)
+    {
+        _db = db;
+        _activityFormatter = activityFormatter;
+    }
 
     public async Task<DashboardResponseDto> GetAsync(int userId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default)
     {
@@ -36,6 +42,16 @@ public sealed class DashboardService
         var inspectedDeliveryIds = inspectionList.Select(i => i.DeliveryId).ToHashSet();
         var ncrCount = await _db.NonConformances.CountAsync(n => n.Status != NonConformanceStatus.Closed && n.Status != NonConformanceStatus.Resolved, cancellationToken);
         var awaitingApprovals = await _db.AgentWorkflows.CountAsync(w => w.Status == WorkflowStatus.AwaitingApproval && w.ApprovalStatus == AgentApprovalStatus.Pending, cancellationToken);
+
+        // "Awaiting approval" means two different things depending on who is
+        // looking. A ProcurementManager is waiting on an agent recommendation
+        // decision; a SiteManager approves material requests. Showing the Site
+        // Manager the agent-workflow count reported procurement work they are not
+        // part of, so each role now gets the queue they can actually act on.
+        var pendingSiteApprovals = requestList.Count(r => r.Status == MaterialRequestStatus.PendingApproval);
+        var proposalsAwaitingApproval = primaryRole is "SiteManager" or "Administrator"
+            ? pendingSiteApprovals
+            : awaitingApprovals;
         var activeRfqs = await _db.Rfqs.CountAsync(r => r.Status == RfqStatus.Issued, cancellationToken);
         var quotationsReceivedToday = await _db.Quotations.CountAsync(q => q.QuotationDate == today, cancellationToken);
         var metrics = new List<DashboardMetricDto>
@@ -45,7 +61,11 @@ public sealed class DashboardService
             Metric("approvedPendingDelivery", "Approved pending delivery", requestList.Count(r => r.Status == MaterialRequestStatus.Approved)),
             Metric("activeRfqs", "Active RFQs", activeRfqs),
             Metric("quotationsToday", "Quotations received today", quotationsReceivedToday),
-            Metric("proposalsAwaitingApproval", "Proposals awaiting approval", awaitingApprovals),
+            Metric("proposalsAwaitingApproval",
+                primaryRole is "SiteManager" or "Administrator"
+                    ? "Requests awaiting your approval"
+                    : "Proposals awaiting approval",
+                proposalsAwaitingApproval),
             Metric("confirmedPurchaseOrders", "Confirmed purchase orders", poList.Count(p => p.Status == PurchaseOrderStatus.Confirmed)),
             Metric("monthlySpend", "Monthly landed spend", poList.Where(p => p.OrderDate.Month == today.Month && p.OrderDate.Year == today.Year).Sum(p => p.TotalAmount), "LKR"),
             Metric("deliveriesExpectedToday", "Deliveries expected today", deliveryList.Count(d => d.Status is DeliveryStatus.Scheduled or DeliveryStatus.InTransit && d.PurchaseOrder?.ExpectedDeliveryDate == today)),
@@ -56,14 +76,32 @@ public sealed class DashboardService
             Metric("activeNcrs", "Active open NCRs", ncrCount)
         };
 
-        var tasks = BuildTasks(primaryRole, awaitingApprovals, ncrCount);
-        var activity = await _db.AuditLogs.Where(a => a.UserId == userId).OrderByDescending(a => a.CreatedAt).Take(8)
-            .Select(a => new DashboardActivityDto(a.Id, a.Action, a.RequestPath, a.CreatedAt)).ToListAsync(cancellationToken);
+        var tasks = BuildTasks(primaryRole, awaitingApprovals, ncrCount, pendingSiteApprovals);
+
+        // "Your authenticated audit activity" is only accurate when the rows are
+        // the caller's own AND belong to their business. The shared formatter does
+        // both the business mapping and the role scoping, so this dashboard does
+        // not repeat it.
+        var auditRows = await _db.AuditLogs
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(ActivityScanLimit)
+            .ToListAsync(cancellationToken);
+
+        var activity = await _activityFormatter.FormatAsync(auditRows, primaryRole);
         var alerts = await BuildAlertsAsync(primaryRole, today, cancellationToken);
         return new DashboardResponseDto(primaryRole, normalizedRoles, metrics, tasks, activity, alerts, DateTime.UtcNow);
     }
 
+    /// <summary>
+    /// Rows scanned per dashboard. Larger than the number shown because the role
+    /// filter drops rows afterwards, so a role whose early rows belong to another
+    /// business area still gets a full page.
+    /// </summary>
+    private const int ActivityScanLimit = 40;
+
     private static DashboardMetricDto Metric(string key, string label, decimal value, string? suffix = null) => new(key, label, value, suffix);
+
 
     private static string ChoosePrimaryRole(IReadOnlyCollection<string> roles)
     {
@@ -73,8 +111,37 @@ public sealed class DashboardService
     }
 
 
-    private static List<DashboardTaskDto> BuildTasks(string role, int awaitingApprovals, int ncrCount) => role switch
+    private static List<DashboardTaskDto> BuildTasks(string role, int awaitingApprovals, int ncrCount, int pendingSiteApprovals = 0) => role switch
     {
+        "Administrator" => new List<DashboardTaskDto>
+        {
+            // Without a branch the Administrator fell through to the empty default,
+            // so the most privileged role was shown no tasks at all.
+            new("manage-users", "Manage user accounts", "Create accounts, assign roles and deactivate access.", "/administration", "Normal"),
+            new("monitor-agents", "Monitor AI agent workflows", "Inspect persisted planning, analysis, risk and validation steps.", "/agent-workflows", "Normal"),
+            new("review-activity", "Review audit activity", "Trace every recorded action across all business areas.", "/dashboard", "Normal"),
+            new("monitor-operations", "Monitor operational exceptions", $"{ncrCount} open non-conformance(s) and {awaitingApprovals} workflow(s) awaiting a decision.", "/quality-inspections", ncrCount > 0 ? "High" : "Normal")
+        },
+        "SiteManager" => new List<DashboardTaskDto>
+        {
+            // SiteManager approves material requests (PendingApproval -> Approved).
+            // Without this branch the role fell through to the empty default and
+            // the dashboard offered a Site Manager nothing to do at all.
+            new("review-requests", "Review pending material requests",
+                pendingSiteApprovals > 0
+                    ? $"{pendingSiteApprovals} request(s) are waiting for your approval decision."
+                    : "No material requests are waiting for your approval.",
+                "/material-requests", pendingSiteApprovals > 0 ? "High" : "Normal"),
+            new("monitor-procurement", "Monitor procurement progress",
+                "Track approved requests moving through RFQ, quotation and purchase order.",
+                "/procurement", "Normal"),
+            new("review-exceptions", $"Review {ncrCount} open non-conformance(s)",
+                "Follow corrective actions raised by site quality inspections.",
+                "/quality-inspections", ncrCount > 0 ? "High" : "Normal"),
+            new("monitor-deliveries", "Monitor receiving progress",
+                "Check confirmed orders against recorded deliveries and discrepancies.",
+                "/deliveries", "Normal")
+        },
         "SiteEngineer" => new List<DashboardTaskDto>
         {
             new("create-request", "Create new material request", "Submit a site requirement with project, item and required date.", "/material-requests?create=1", "Normal"),
@@ -109,9 +176,39 @@ public sealed class DashboardService
     private async Task<List<DashboardAlertDto>> BuildAlertsAsync(string role, DateOnly today, CancellationToken cancellationToken)
     {
         var alerts = new List<DashboardAlertDto>();
+
+        // The Administrator has no business-area alerts of its own, but it does
+        // need to see access and system exceptions. Previously it received nothing.
+        if (role == "Administrator")
+        {
+            var inactive = await _db.Users.CountAsync(u => !u.IsActive, cancellationToken);
+            if (inactive > 0)
+                alerts.Add(new DashboardAlertDto("Warning", "Deactivated accounts",
+                    $"{inactive} account(s) are disabled and cannot sign in.", "/administration"));
+
+            var failedApprovals = await _db.AgentWorkflows.CountAsync(
+                w => w.Status == WorkflowStatus.AwaitingApproval && w.ApprovalStatus == AgentApprovalStatus.Pending,
+                cancellationToken);
+            if (failedApprovals > 0)
+                alerts.Add(new DashboardAlertDto("Danger", "Agent workflows awaiting decision",
+                    $"{failedApprovals} workflow(s) have no manager decision recorded.", "/agent-workflows"));
+
+            var openNcrs = await _db.NonConformances.CountAsync(
+                n => n.Status != NonConformanceStatus.Closed && n.Status != NonConformanceStatus.Resolved,
+                cancellationToken);
+            if (openNcrs > 0)
+                alerts.Add(new DashboardAlertDto("Danger", "Open non-conformances",
+                    $"{openNcrs} non-conformance(s) remain open across all sites.", "/quality-inspections"));
+        }
+
         if (role is "ProcurementOfficer" or "ProcurementManager" or "SiteManager")
         {
-            var expiring = await _db.Quotations.CountAsync(q => q.ValidUntil >= today && q.ValidUntil <= today.AddDays(7) && q.Status != QuotationStatus.Rejected, cancellationToken);
+            // Expiring within seven days, inclusive of today. `today` is supplied
+            // by the caller as the business date so the window is evaluated in one
+            // timezone consistently instead of mixing a UTC-derived DateOnly with
+            // local server dates (which shifted the count by one near midnight).
+            var windowEnd = today.AddDays(7);
+            var expiring = await _db.Quotations.CountAsync(q => q.ValidUntil >= today && q.ValidUntil <= windowEnd && q.Status != QuotationStatus.Rejected, cancellationToken);
             if (expiring > 0) alerts.Add(new DashboardAlertDto("Warning", "Quotations expiring soon", $"{expiring} quotation(s) expire within seven days.", "/quotations"));
             var suspended = await _db.Suppliers.CountAsync(s => s.Status == SupplierStatus.Suspended, cancellationToken);
             if (suspended > 0) alerts.Add(new DashboardAlertDto("Danger", "Suspended suppliers", $"{suspended} supplier(s) require review before award.", "/suppliers"));

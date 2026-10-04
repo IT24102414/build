@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/error_widget.dart' as buildwise;
+import '../../../core/widgets/field_format.dart';
 import '../../../core/widgets/widgets.dart' hide ErrorWidget;
 import '../services/procurement_service.dart';
 import '../widgets/procurement_status_tone.dart';
 
 /// RFQ register — mirrors the web app's RFQs page.
 ///
-/// **Not routed in the Flutter shell.** The procurement desk runs on the web
-/// application: the officer selects supplier *contact records*, BuildWise emails
-/// the RFQ to them, and the quotations that come back by email are keyed in
-/// there. Suppliers are external parties and never log in, so there is no mobile
-/// surface for them and no reason to raise an RFQ from a site device. See
-/// `core/auth/buildwise_roles.dart` (`webOnly`) and
-/// `features/auth/screens/web_only_notice_screen.dart`.
+/// Reached by the Procurement Officer and Procurement Manager
+/// (`BuildWiseRoles.procurementDesk`). It points at the same endpoints the
+/// React page uses, so the two clients cannot drift in behaviour.
 ///
 /// An RFQ can only be raised against an **Approved** material request, and at
 /// least one active supplier must be invited, because the whole point is to open
-/// a quotation window with real suppliers.
+/// a quotation window with real suppliers. Suppliers themselves are external
+/// parties: BuildWise emails them, they never log in.
 class RfqScreen extends StatefulWidget {
   const RfqScreen({super.key, this.service});
 
@@ -300,6 +298,9 @@ class _IssueRfqSheetState extends State<_IssueRfqSheet> {
                     label: 'Approved material request',
                     value: _requestId?.toString(),
                     items: _requests.map((r) => r['id'].toString()).toList(),
+                    // Label each option with the material, not the bare id.
+                    itemLabels:
+                        _requests.map(FieldFormat.materialRequestLabel).toList(),
                     onChanged: (value) =>
                         setState(() => _requestId = value == null ? null : int.parse(value)),
                   ),

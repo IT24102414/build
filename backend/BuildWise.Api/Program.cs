@@ -85,6 +85,10 @@ builder.Services.AddScoped<DeliveryAgentService>();
 builder.Services.AddScoped<QualityInspectionService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<DashboardService>();
+// Shared activity mapping: one place that turns audit rows into business-readable
+// entries with related records resolved. Registered next to the dashboard so the
+// scoping rule is fixed once rather than per role dashboard.
+builder.Services.AddScoped<ActivityFormatter>();
 
 // Shared authentication (Core, used by every component controllers, React and Flutter)
 builder.Services.AddSingleton<JwtTokenService>();

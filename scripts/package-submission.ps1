@@ -3,10 +3,13 @@ param(
     [ValidatePattern('^[A-Za-z0-9_-]+$')][string]$GroupNumber = 'G07',
     [string]$SourceRef = 'HEAD',
     [string]$ApkPath,
-    [string]$OutputDir = (Join-Path $PSScriptRoot '..\submission_packages')
+    [string]$OutputDir
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if ([string]::IsNullOrWhiteSpace($OutputDir)) {
+    $OutputDir = Join-Path $repoRoot 'submission_packages'
+}
 $outputRoot = [IO.Path]::GetFullPath($OutputDir)
 if (-not $outputRoot.StartsWith($repoRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'The package output must be inside the project workspace.'

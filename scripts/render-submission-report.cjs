@@ -33,6 +33,18 @@ function markdown(source) {
 }
 (async () => {
   let source = fs.readFileSync(path.join(root, 'docs/submission-report.md'), 'utf8');
+  source += '\n\n' + fs.readFileSync(path.join(root, 'docs/submission-completion-guide.md'), 'utf8');
+  const individualLogs = [
+    ['Student 1: Peiris DPSS', 'IT24XXXXX-Peiris-ai-usage-log.md'],
+    ['Student 2: Theebika', 'IT24102414-ai-usage-log.md'],
+    ['Student 3: Ramya', 'IT24102513-Ramya-ai-usage-log.md'],
+    ['Student 4: Anoja', 'IT24XXXXX-Anoja-ai-usage-log.md'],
+  ];
+  for (const [student, file] of individualLogs) {
+    source += `\n\n# ${student}: historical AI log appendix\n\nHistorical student log reproduced for review. Personal authorship, chronology, reflections and signatures must be verified by the student before submission; reproduction is not certification.\n\n`;
+    source += fs.readFileSync(path.join(root, 'docs/reports', file), 'utf8');
+  }
+  source += '\n\n# Actual Codex maintenance disclosure\n\n' + fs.readFileSync(path.join(root, 'docs/reports/2026-10-05-codex-maintenance-log.md'), 'utf8');
   for (const file of fs.readdirSync(path.join(root, 'docs/adr')).filter(file => file.endsWith('.md')).sort()) {
     source += `\n\n# ADR appendix: ${file}\n\n` + fs.readFileSync(path.join(root, 'docs/adr', file), 'utf8');
   }

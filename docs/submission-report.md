@@ -144,37 +144,259 @@ The report renderer includes the ADR source documents as appendices: durable age
 
 This maintenance and report draft were AI-assisted using Codex on 2026-10-05. Outputs and actual verification are recorded in docs/reports/2026-10-05-codex-maintenance-log.md. Existing student AI logs/declarations are historical material that the students must review and update; this report does not certify their completeness.
 
+Consolidated group declaration — UNSIGNED TEMPLATE: We disclose all coding-assistant use in our individual logs and the group maintenance record. Each member has reviewed the work claimed under their name and can explain, test and modify it. Each personal reflection is the student's own writing. Historical claims have been checked against actual evidence. This statement becomes a declaration only after all four members verify and sign it.
+
+Student 1 name/ID/signature/date: [complete after review]. Student 2 name/ID/signature/date: [complete after review]. Student 3 name/ID/signature/date: [complete after review]. Student 4 name/ID/signature/date: [complete after review].
+
 ## Part B: Individual report sections
 
-### Student 1: Peiris DPSS - Material Request and Approval
+The following sections describe repository-supported component work, not verified personal authorship. Each named student must confirm the assigned scope and replace unsigned personal fields. Historical AI logs are included for review; their dates, models, results and reflections are not independently certified by this report.
 
-Student ID: NOT CONFIRMED. Contribution statement, owned backend/database/React/Flutter changes, distinct agent contribution, real commit/PR/test links, challenges, learning and dated AI log: TO BE COMPLETED BY THE STUDENT.
+### Student 1: Peiris DPSS
 
-Approximately one-page reflection: STUDENT-AUTHORED TEXT REQUIRED. Signed declaration/date: NOT PROVIDED.
+Primary component: A — Material Request and Approval. Student ID and registered name require confirmation.
 
-### Student 2: Theebika - IT24102414 - Procurement
+#### Contribution statement and technical work
 
-Confirm full registered name. Component scope: suppliers, RFQs, quotation comparison, workflow decisions and purchase orders. Personal contribution statement, commit/PR/test links, challenges, learning and verified AI chronology: TO BE COMPLETED BY THE STUDENT.
+Component responsibility proposed by the existing project ownership map: implement and integrate the API, relational entities, React screens, Flutter screens, tests and domain agent below. Student confirmation: [write the specific work you personally implemented, reviewed and tested; identify shared work and collaborators]. Repository presence alone does not establish who wrote the code.
 
-Approximately one-page reflection: STUDENT-AUTHORED TEXT REQUIRED. Signed declaration/date: NOT PROVIDED.
+Demand assessment and human approval beyond CRUD. The API checks required request information, role scope and approval rules; the request agent supports assessment without replacing the approver.
 
-### Student 3: Ramya - IT24102513 - Delivery and Receiving
+Database scope: MaterialRequest, MaterialRequestItem, Approval. Inspect corresponding EF configurations and migrations for primary/foreign keys, relationships, constraints and audit fields. Explain how the component consumes upstream IDs and exposes downstream records without duplicating another component's source of truth.
 
-Confirm full registered name. Personal contribution statement, owned cross-stack work, distinct agent contribution, commit/PR/test links, challenges, learning and verified AI log: TO BE COMPLETED BY THE STUDENT.
+| Layer | Evidence file |
+|---|---|
+| ASP.NET Core API | backend/BuildWise.Api/Controllers/MaterialRequestsController.cs |
+| Backend regression tests | backend/BuildWise.Api.Tests/MaterialRequestServiceTests.cs |
+| React UI | web/buildwise-web/src/pages/MaterialRequestsPage.jsx |
+| Flutter UI | mobile/buildwise_mobile/lib/features/operations/screens/material_requests_screen.dart |
+| Flutter tests | mobile/buildwise_mobile/test/material_requests_test.dart |
+| Distinct domain agent | backend/agent_service/request_agent.py |
+| Agent tests | backend/agent_service/test_request_agent.py |
 
-Approximately one-page reflection: STUDENT-AUTHORED TEXT REQUIRED. Signed declaration/date: NOT PROVIDED.
+Meaningful API endpoints: GET /api/material-requests; GET /api/material-requests/my; GET /api/material-requests/{id}; POST /api/material-requests; POST /api/material-requests/{id}/approval; POST /api/agent/analyze-request/{id}. Route parameters are symbolic; inspect controller attributes for exact constraints. This supplies at least four component operations; explain authorization, input DTOs, success responses and invalid-input handling in the viva.
 
-### Student 4: Anoja - Quality Inspection and NCR
+#### Distinct Agentic AI contribution
 
-Student ID: NOT CONFIRMED. Personal contribution statement, owned cross-stack work, distinct agent contribution, commit/PR/test links, challenges, learning and verified AI log: TO BE COMPLETED BY THE STUDENT.
+The component agent is `request_agent.py` with the companion `test_request_agent.py` suite. Document its input contract, permitted context/tool use, structured output and deterministic checks before a human consumes its recommendation. A model-generated rationale is advisory; the API retains business-rule enforcement. Student confirmation: [identify your personally implemented agent function, orchestration/state changes, rejected alternatives and verification]. Explain how a unavailable provider or malformed recommendation is surfaced rather than silently recorded as a valid decision.
 
-Approximately one-page reflection: STUDENT-AUTHORED TEXT REQUIRED. Signed declaration/date: NOT PROVIDED.
+#### Commit, pull-request and test evidence
+
+The following is real path-based Git history, including the recorded author. It must not be relabelled as the named student's authorship. Add actual reviewed PR URLs or state that no PR evidence is available.
+
+```
+4e09d1c | Loganathan Theebika | Align React and Flutter workflows and refresh SE3090 submission documentation
+c318c46 | Loganathan Theebika | Complete field mobile workspaces: approvals, review, PO, quotation entry, RBAC, validation UX
+04d35a6 | Loganathan Theebika | Complete field mobile workspaces
+9ab414f | IT24102414 | feat: RBAC hardening, supplier portal, budget validation and C1-C4 coverage
+```
+
+Commit URLs use https://github.com/IT24102414/build/commit/ followed by the recorded hash. Personal commit/PR attribution: [student verifies]. Tests above belong to the observed group suites; component-specific passed counts must come from a recorded focused run, not a guessed division of the group totals.
+
+#### Challenges and learning — student input
+
+Describe one actual cross-stack contract problem, one invalid input or role boundary you tested, and one agent output you corrected or rejected. Reference the exact change/test. Explain what you can now implement or debug without external AI assistance. Do not claim these experiences until you have personally reviewed and reproduced them.
+
+#### Individual AI usage log
+
+The existing log `IT24XXXXX-Peiris-ai-usage-log.md` is reproduced in the individual-log appendix under this student's label. Verify each date, tool/model, prompt/task, output, correction and test result; remove unsupported entries. Add the actual 5 October maintenance work you reviewed, distinguishing coding-assistant use from the application's own agents. Do not invent past prompts or dates.
+
+#### Approximately one-page personal AI reflection — student authored
+
+[Write approximately one page in your own words. Paragraph 1: tools used and stages of work. Paragraph 2: a useful output and a wrong output, tied to real evidence. Paragraph 3: what you changed, added or rejected and why. Paragraph 4: what you learned about your skills and limits, and how you verified ownership. Use your actual log and Git history. This report deliberately does not generate a first-person reflection for submission.]
+
+#### Signed individual declaration — unsigned template
+
+I confirm that my contribution statement and AI usage log accurately describe my work and assistance received, and that my reflection is my own writing. I can explain, test and modify the work claimed under my name. I have reviewed the evidence linked in this section.
+
+Registered name: [student completes]. Student ID: [student completes]. Signature: [student signs after review]. Date: [actual signing date].
+
+
+### Student 2: Theebika — IT24102414
+
+Primary component: B — Procurement. Confirm full registered name.
+
+#### Contribution statement and technical work
+
+Component responsibility proposed by the existing project ownership map: implement and integrate the API, relational entities, React screens, Flutter screens, tests and domain agent below. Student confirmation: [write the specific work you personally implemented, reviewed and tested; identify shared work and collaborators]. Repository presence alone does not establish who wrote the code.
+
+Quotation analysis, budget validation and human procurement decision. Officers enter offers and initiate analysis; managers approve or request changes. Successful approval creates a confirmed purchase order transactionally.
+
+Database scope: Supplier, Rfq, Quotation, PurchaseOrder, AgentWorkflow, AgentWorkflowStep, AgentApproval. Inspect corresponding EF configurations and migrations for primary/foreign keys, relationships, constraints and audit fields. Explain how the component consumes upstream IDs and exposes downstream records without duplicating another component's source of truth.
+
+| Layer | Evidence file |
+|---|---|
+| ASP.NET Core API | backend/BuildWise.Api/Controllers/ProcurementWorkflowController.cs |
+| Backend regression tests | backend/BuildWise.Api.Tests/ProcurementValidationServiceTests.cs |
+| React UI | web/buildwise-web/src/Features/procurement/pages/RequestWorkspace.jsx; components/QuotationEntryForm.jsx; components/QuotationComparisonView.jsx; components/ProcurementApprovalPanel.jsx |
+| Flutter UI | mobile/buildwise_mobile/lib/features/procurement/screens/quotation_comparison_screen.dart |
+| Flutter tests | mobile/buildwise_mobile/test/quotation_entry_test.dart |
+| Distinct domain agent | backend/agent_service/quotation_agent.py |
+| Agent tests | backend/agent_service/test_quotation_agent.py |
+
+Meaningful API endpoints: POST /api/material-requests/{requestId}/procurement-workflow; GET /api/procurement-workflow/{workflowId}; GET /api/procurement-workflow/{workflowId}/history; POST /api/procurement-workflow/{workflowId}/decision. Route parameters are symbolic; inspect controller attributes for exact constraints. This supplies at least four component operations; explain authorization, input DTOs, success responses and invalid-input handling in the viva.
+
+#### Distinct Agentic AI contribution
+
+The component agent is `quotation_agent.py` with the companion `test_quotation_agent.py` suite. Document its input contract, permitted context/tool use, structured output and deterministic checks before a human consumes its recommendation. A model-generated rationale is advisory; the API retains business-rule enforcement. Student confirmation: [identify your personally implemented agent function, orchestration/state changes, rejected alternatives and verification]. Explain how a unavailable provider or malformed recommendation is surfaced rather than silently recorded as a valid decision.
+
+#### Commit, pull-request and test evidence
+
+The following is real path-based Git history, including the recorded author. It must not be relabelled as the named student's authorship. Add actual reviewed PR URLs or state that no PR evidence is available.
+
+```
+4e09d1c | Loganathan Theebika | Align React and Flutter workflows and refresh SE3090 submission documentation
+c318c46 | Loganathan Theebika | Complete field mobile workspaces: approvals, review, PO, quotation entry, RBAC, validation UX
+04d35a6 | Loganathan Theebika | Complete field mobile workspaces
+9ab414f | IT24102414 | feat: RBAC hardening, supplier portal, budget validation and C1-C4 coverage
+```
+
+Commit URLs use https://github.com/IT24102414/build/commit/ followed by the recorded hash. Personal commit/PR attribution: [student verifies]. Tests above belong to the observed group suites; component-specific passed counts must come from a recorded focused run, not a guessed division of the group totals.
+
+#### Challenges and learning — student input
+
+Describe one actual cross-stack contract problem, one invalid input or role boundary you tested, and one agent output you corrected or rejected. Reference the exact change/test. Explain what you can now implement or debug without external AI assistance. Do not claim these experiences until you have personally reviewed and reproduced them.
+
+#### Individual AI usage log
+
+The existing log `IT24102414-ai-usage-log.md` is reproduced in the individual-log appendix under this student's label. Verify each date, tool/model, prompt/task, output, correction and test result; remove unsupported entries. Add the actual 5 October maintenance work you reviewed, distinguishing coding-assistant use from the application's own agents. Do not invent past prompts or dates.
+
+#### Approximately one-page personal AI reflection — student authored
+
+[Write approximately one page in your own words. Paragraph 1: tools used and stages of work. Paragraph 2: a useful output and a wrong output, tied to real evidence. Paragraph 3: what you changed, added or rejected and why. Paragraph 4: what you learned about your skills and limits, and how you verified ownership. Use your actual log and Git history. This report deliberately does not generate a first-person reflection for submission.]
+
+#### Signed individual declaration — unsigned template
+
+I confirm that my contribution statement and AI usage log accurately describe my work and assistance received, and that my reflection is my own writing. I can explain, test and modify the work claimed under my name. I have reviewed the evidence linked in this section.
+
+Registered name: [student completes]. Student ID: [student completes]. Signature: [student signs after review]. Date: [actual signing date].
+
+
+### Student 3: Ramya — IT24102513
+
+Primary component: C — Delivery and Receiving. Confirm full registered name.
+
+#### Contribution statement and technical work
+
+Component responsibility proposed by the existing project ownership map: implement and integrate the API, relational entities, React screens, Flutter screens, tests and domain agent below. Student confirmation: [write the specific work you personally implemented, reviewed and tested; identify shared work and collaborators]. Repository presence alone does not establish who wrote the code.
+
+Receiving and discrepancy classification beyond CRUD. Confirmed orders feed receiving; persisted received quantities establish the upper bound for downstream inspection. Supplier/material labels must use the actual DTO shape.
+
+Database scope: Delivery, DeliveryItem, DeliveryIssue, DeliveryEvidence. Inspect corresponding EF configurations and migrations for primary/foreign keys, relationships, constraints and audit fields. Explain how the component consumes upstream IDs and exposes downstream records without duplicating another component's source of truth.
+
+| Layer | Evidence file |
+|---|---|
+| ASP.NET Core API | backend/BuildWise.Api/Controllers/DeliveriesController.cs |
+| Backend regression tests | backend/BuildWise.Api.Tests/DeliveryServiceTests.cs |
+| React UI | web/buildwise-web/src/pages/DeliveriesPage.jsx |
+| Flutter UI | mobile/buildwise_mobile/lib/features/operations/screens/delivery_receiving_screen.dart |
+| Flutter tests | mobile/buildwise_mobile/test/delivery_receiving_test.dart |
+| Distinct domain agent | backend/agent_service/delivery_agent.py |
+| Agent tests | backend/agent_service/test_delivery_agent.py |
+
+Meaningful API endpoints: GET /api/deliveries; GET /api/deliveries/confirmed-orders; POST /api/deliveries; POST /api/deliveries/{id}/discrepancy-analysis; GET /api/deliveries/{id}/issues. Route parameters are symbolic; inspect controller attributes for exact constraints. This supplies at least four component operations; explain authorization, input DTOs, success responses and invalid-input handling in the viva.
+
+#### Distinct Agentic AI contribution
+
+The component agent is `delivery_agent.py` with the companion `test_delivery_agent.py` suite. Document its input contract, permitted context/tool use, structured output and deterministic checks before a human consumes its recommendation. A model-generated rationale is advisory; the API retains business-rule enforcement. Student confirmation: [identify your personally implemented agent function, orchestration/state changes, rejected alternatives and verification]. Explain how a unavailable provider or malformed recommendation is surfaced rather than silently recorded as a valid decision.
+
+#### Commit, pull-request and test evidence
+
+The following is real path-based Git history, including the recorded author. It must not be relabelled as the named student's authorship. Add actual reviewed PR URLs or state that no PR evidence is available.
+
+```
+4e09d1c | Loganathan Theebika | Align React and Flutter workflows and refresh SE3090 submission documentation
+04d35a6 | Loganathan Theebika | Complete field mobile workspaces
+9ab414f | IT24102414 | feat: RBAC hardening, supplier portal, budget validation and C1-C4 coverage
+9466c5e | Loganathan Theebika | feat: complete procurement and operations workflow
+```
+
+Commit URLs use https://github.com/IT24102414/build/commit/ followed by the recorded hash. Personal commit/PR attribution: [student verifies]. Tests above belong to the observed group suites; component-specific passed counts must come from a recorded focused run, not a guessed division of the group totals.
+
+#### Challenges and learning — student input
+
+Describe one actual cross-stack contract problem, one invalid input or role boundary you tested, and one agent output you corrected or rejected. Reference the exact change/test. Explain what you can now implement or debug without external AI assistance. Do not claim these experiences until you have personally reviewed and reproduced them.
+
+#### Individual AI usage log
+
+The existing log `IT24102513-Ramya-ai-usage-log.md` is reproduced in the individual-log appendix under this student's label. Verify each date, tool/model, prompt/task, output, correction and test result; remove unsupported entries. Add the actual 5 October maintenance work you reviewed, distinguishing coding-assistant use from the application's own agents. Do not invent past prompts or dates.
+
+#### Approximately one-page personal AI reflection — student authored
+
+[Write approximately one page in your own words. Paragraph 1: tools used and stages of work. Paragraph 2: a useful output and a wrong output, tied to real evidence. Paragraph 3: what you changed, added or rejected and why. Paragraph 4: what you learned about your skills and limits, and how you verified ownership. Use your actual log and Git history. This report deliberately does not generate a first-person reflection for submission.]
+
+#### Signed individual declaration — unsigned template
+
+I confirm that my contribution statement and AI usage log accurately describe my work and assistance received, and that my reflection is my own writing. I can explain, test and modify the work claimed under my name. I have reviewed the evidence linked in this section.
+
+Registered name: [student completes]. Student ID: [student completes]. Signature: [student signs after review]. Date: [actual signing date].
+
+
+### Student 4: Anoja
+
+Primary component: D — Quality Inspection and NCR. Student ID and registered name require confirmation.
+
+#### Contribution statement and technical work
+
+Component responsibility proposed by the existing project ownership map: implement and integrate the API, relational entities, React screens, Flutter screens, tests and domain agent below. Student confirmation: [write the specific work you personally implemented, reviewed and tested; identify shared work and collaborators]. Repository presence alone does not establish who wrote the code.
+
+Inspection quantity reconciliation, automatic NCR creation and controlled resolution. Zero rejection creates no NCR; positive rejection creates one. Failed checklist items require notes, rejected quantities require reasons, and evidence count/size limits apply.
+
+Database scope: Inspection, InspectionItem, InspectionEvidence, NonConformance. Inspect corresponding EF configurations and migrations for primary/foreign keys, relationships, constraints and audit fields. Explain how the component consumes upstream IDs and exposes downstream records without duplicating another component's source of truth.
+
+| Layer | Evidence file |
+|---|---|
+| ASP.NET Core API | backend/BuildWise.Api/Controllers/QualityInspectionsController.cs |
+| Backend regression tests | backend/BuildWise.Api.Tests/QualityInspectionServiceTests.cs |
+| React UI | web/buildwise-web/src/pages/QualityInspectionsPage.jsx |
+| Flutter UI | mobile/buildwise_mobile/lib/features/operations/screens/quality_inspection_screen.dart |
+| Flutter tests | mobile/buildwise_mobile/test/quality_inspection_test.dart |
+| Distinct domain agent | backend/agent_service/quality_agent.py |
+| Agent tests | backend/agent_service/test_quality_agent.py |
+
+Meaningful API endpoints: POST /api/quality-inspections; GET /api/quality-inspections; GET /api/quality-inspections/{id}; POST /api/quality-inspections/{id}/risk-analysis; GET /api/quality-inspections/non-conformances; POST /api/quality-inspections/non-conformances/{id}/transition. Route parameters are symbolic; inspect controller attributes for exact constraints. This supplies at least four component operations; explain authorization, input DTOs, success responses and invalid-input handling in the viva.
+
+#### Distinct Agentic AI contribution
+
+The component agent is `quality_agent.py` with the companion `test_quality_agent.py` suite. Document its input contract, permitted context/tool use, structured output and deterministic checks before a human consumes its recommendation. A model-generated rationale is advisory; the API retains business-rule enforcement. Student confirmation: [identify your personally implemented agent function, orchestration/state changes, rejected alternatives and verification]. Explain how a unavailable provider or malformed recommendation is surfaced rather than silently recorded as a valid decision.
+
+#### Commit, pull-request and test evidence
+
+The following is real path-based Git history, including the recorded author. It must not be relabelled as the named student's authorship. Add actual reviewed PR URLs or state that no PR evidence is available.
+
+```
+4e09d1c | Loganathan Theebika | Align React and Flutter workflows and refresh SE3090 submission documentation
+c318c46 | Loganathan Theebika | Complete field mobile workspaces: approvals, review, PO, quotation entry, RBAC, validation UX
+04d35a6 | Loganathan Theebika | Complete field mobile workspaces
+9ab414f | IT24102414 | feat: RBAC hardening, supplier portal, budget validation and C1-C4 coverage
+```
+
+Commit URLs use https://github.com/IT24102414/build/commit/ followed by the recorded hash. Personal commit/PR attribution: [student verifies]. Tests above belong to the observed group suites; component-specific passed counts must come from a recorded focused run, not a guessed division of the group totals.
+
+#### Challenges and learning — student input
+
+Describe one actual cross-stack contract problem, one invalid input or role boundary you tested, and one agent output you corrected or rejected. Reference the exact change/test. Explain what you can now implement or debug without external AI assistance. Do not claim these experiences until you have personally reviewed and reproduced them.
+
+#### Individual AI usage log
+
+The existing log `IT24XXXXX-Anoja-ai-usage-log.md` is reproduced in the individual-log appendix under this student's label. Verify each date, tool/model, prompt/task, output, correction and test result; remove unsupported entries. Add the actual 5 October maintenance work you reviewed, distinguishing coding-assistant use from the application's own agents. Do not invent past prompts or dates.
+
+#### Approximately one-page personal AI reflection — student authored
+
+[Write approximately one page in your own words. Paragraph 1: tools used and stages of work. Paragraph 2: a useful output and a wrong output, tied to real evidence. Paragraph 3: what you changed, added or rejected and why. Paragraph 4: what you learned about your skills and limits, and how you verified ownership. Use your actual log and Git history. This report deliberately does not generate a first-person reflection for submission.]
+
+#### Signed individual declaration — unsigned template
+
+I confirm that my contribution statement and AI usage log accurately describe my work and assistance received, and that my reflection is my own writing. I can explain, test and modify the work claimed under my name. I have reviewed the evidence linked in this section.
+
+Registered name: [student completes]. Student ID: [student completes]. Signature: [student signs after review]. Date: [actual signing date].
+
 
 ## Part C: Submission links and references
 
 Repository: https://github.com/IT24102414/build
 
-React deployment: NOT PROVIDED. API/health/Swagger deployment: NOT PROVIDED. PostgreSQL deployment evidence: NOT PROVIDED. Current APK installation evidence: NOT PROVIDED. Ten-minute video: NOT PROVIDED.
+React deployment: NOT PROVIDED. API/health/Swagger deployment: NOT PROVIDED. PostgreSQL deployment evidence: NOT PROVIDED. Current APK: https://github.com/IT24102414/build/raw/refs/heads/main/BuildWise.apk (source commit 3b94c1e, artifact commit 23d5f22; release-mode build succeeded). Physical-device installation evidence: NOT PROVIDED. API endpoint embedded in this demo APK: http://10.0.2.2:5078/api, suitable for the Android emulator only. SHA-256: 7917092FC8B3C378C12920D4202AC4F04527630349ADE8453DE11ACDF055EBAD. Existing development-key signing is used; this is not a production-store signing assertion. Ten-minute video: NOT PROVIDED.
 
 Primary requirements source: user-supplied SE3090 Assignment 1 specification, Year 3 Semester 1, 2026. Implementation references: root README, current source, EF migrations, test suites, docs/submission-readiness.md and the listed ADRs. Library dependencies and font licensing are recorded in package manifests and assets/fonts/OFL.txt. This draft supplies no invented signatures, contribution history, performance figures or deployment results.
 

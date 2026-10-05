@@ -127,7 +127,7 @@ Additional live workflow, authorization and performance scripts are indexed in [
 
 [Submission readiness](docs/submission-readiness.md) maps the supplied assignment requirements to source/evidence and outstanding items. [Consolidated report draft](docs/submission-report.md) ([PDF](docs/SE3090_G07_Consolidated_Report_Draft.pdf)) provides the group report and clearly marked individual sections. [ADRs](docs/adr) cover orchestration, durable state, React/Flutter state management, deployment and external suppliers.
 
-Deployment URLs, PostgreSQL hosting evidence, the 10-minute video, a current installed APK demonstration, member IDs/signatures and student-authored reflections must be supplied by the team. Local success is not evidence of public deployment or a passing GitHub Actions run. The existing root APK is historical; use the APK artifact from CI for the updated revision and verify it on a device.
+Deployment URLs, PostgreSQL hosting evidence, the 10-minute video, a current installed APK demonstration, member IDs/signatures and student-authored reflections must be supplied by the team. Local success is not evidence of public deployment or a passing GitHub Actions run. The root BuildWise.apk was rebuilt from source 3b94c1e and published in commit 23d5f22. It uses the emulator API URL and development signing key; follow docs/submission-completion-guide.md for installation or a physical-phone rebuild.
 
 The assignment requires evaluator access until at least 2026-10-21. This update is dated 2026-10-05; it does not claim a submission before the 2026-09-30 deadline.
 

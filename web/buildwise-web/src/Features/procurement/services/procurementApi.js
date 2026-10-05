@@ -1,5 +1,6 @@
 import { authApi } from '../../../services/authApi'
 import { API_BASE, fetchOrThrow, isNetworkFailure } from '../../../services/apiTransport'
+import { mapValidationError, statusMessage } from '../../../services/validationErrors'
 
 const todayPlus = (days) => {
   const d = new Date()
@@ -95,14 +96,18 @@ async function request(path, { method = 'GET', body, mockFallback } = {}) {
     }
 
     if (!res.ok) {
-      let message = `Request failed (${res.status})`
+      let data = null
       try {
-        const data = await res.json()
-        message = data?.error || data?.title || (typeof data === 'string' ? data : message)
+        data = await res.json()
       } catch {
         // response had no JSON body
       }
-      throw new Error(message)
+      const { fieldErrors } = mapValidationError(data)
+      const details = Object.values(fieldErrors).join(' ')
+      const error = new Error(res.status === 400 && details ? details : statusMessage(res.status, data))
+      error.status = res.status
+      error.payload = data
+      throw error
     }
 
     usingMockFallback = false
@@ -125,6 +130,7 @@ const qs = (params = {}) => {
 }
 
 export const procurementApi = {
+  getLatestWorkflow: (requestId) => request(`/material-requests/${requestId}/procurement-workflow`),
   // Project materials budget. Commercial information: readable by the
   // procurement side only, which the API enforces server-side.
   getProjectBudget: (projectId) => request(`/projects/${projectId}/budget`),

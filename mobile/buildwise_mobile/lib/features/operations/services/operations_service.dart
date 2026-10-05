@@ -3,7 +3,8 @@ import 'dart:convert';
 import '../../../core/api/api_client.dart';
 
 class OperationsService {
-  OperationsService({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
+  OperationsService({ApiClient? apiClient})
+    : _apiClient = apiClient ?? ApiClient();
 
   final ApiClient _apiClient;
 
@@ -26,8 +27,12 @@ class OperationsService {
     return _list(response, 'material requests');
   }
 
-  Future<Map<String, dynamic>> getProcurementStatus(int materialRequestId) async {
-    final response = await _apiClient.get('/material-requests/$materialRequestId/procurement-status');
+  Future<Map<String, dynamic>> getProcurementStatus(
+    int materialRequestId,
+  ) async {
+    final response = await _apiClient.get(
+      '/material-requests/$materialRequestId/procurement-status',
+    );
     if (response.statusCode != 200) {
       throw Exception(_error(response, 'Could not load procurement status'));
     }
@@ -45,25 +50,37 @@ class OperationsService {
     String? description,
     String? unit,
     String? itemRequiredDate,
+    String? requestDate,
+    String? projectName,
+    String? materialName,
   }) async {
-    final response = await _apiClient.post('/material-requests', body: {
-      'projectId': projectId,
-      'requiredDate': requiredDate,
-      'priority': priority,
-      'reason': reason,
-      'siteNotes': siteNotes,
-      'status': 'Draft',
-      'items': [
-        {
-          'materialId': materialId,
-          'requestedQuantity': quantity,
-          'unit': unit,
-          'description': description,
-          'requiredDate': itemRequiredDate,
-          'notes': description,
-        },
-      ],
-    });
+    final response = await _apiClient.post(
+      '/material-requests',
+      body: {
+        'projectId': projectId,
+        // The project may arrive as a name rather than an id when the engineer
+        // typed one BuildWise has not seen before. The API resolves the name and
+        // creates the project when nothing matches.
+        'projectName': ?projectName,
+        'requestDate': ?requestDate,
+        'requiredDate': requiredDate,
+        'priority': priority,
+        'reason': reason,
+        'siteNotes': siteNotes,
+        'status': 'Draft',
+        'items': [
+          {
+            'materialId': materialId,
+            'materialName': ?materialName,
+            'requestedQuantity': quantity,
+            'unit': unit,
+            'description': description,
+            'requiredDate': itemRequiredDate,
+            'notes': description,
+          },
+        ],
+      },
+    );
     return _map(response, 'create material request');
   }
 
@@ -72,8 +89,14 @@ class OperationsService {
     return _list(response, 'material request history');
   }
 
-  Future<Map<String, dynamic>> reviseRequest(int id, Map<String, dynamic> payload) async {
-    final response = await _apiClient.post('/material-requests/$id/revise', body: payload);
+  Future<Map<String, dynamic>> reviseRequest(
+    int id,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await _apiClient.post(
+      '/material-requests/$id/revise',
+      body: payload,
+    );
     return _map(response, 'revise material request');
   }
 
@@ -98,13 +121,17 @@ class OperationsService {
     required List<Map<String, dynamic>> items,
     List<Map<String, dynamic>> evidence = const [],
   }) async {
-    final response = await _apiClient.post('/deliveries', body: {
-      'purchaseOrderId': purchaseOrderId,
-      'deliveryReference': reference,
-      'status': 'Arrived',
-      'items': items,
-      'evidence': evidence,
-    });
+    final response = await _apiClient.post(
+      '/deliveries',
+      body: {
+        'purchaseOrderId': purchaseOrderId,
+        'deliveryReference': reference,
+        'status': 'Arrived',
+        'items': items,
+        'evidence': evidence,
+      },
+      timeout: _agentTimeout,
+    );
     return _map(response, 'record delivery');
   }
 
@@ -137,7 +164,9 @@ class OperationsService {
   }
 
   /// Agent 3 - DeliveryDiscrepancyAgent (:8003) over one recorded delivery.
-  Future<Map<String, dynamic>> analyzeDeliveryDiscrepancy(int deliveryId) async {
+  Future<Map<String, dynamic>> analyzeDeliveryDiscrepancy(
+    int deliveryId,
+  ) async {
     final response = await _apiClient.post(
       '/deliveries/$deliveryId/discrepancy-analysis',
       timeout: _agentTimeout,
@@ -156,7 +185,9 @@ class OperationsService {
 
   /// Agent 1 - QuotationSupplierAnalysisAgent (:8001). Starts the procurement
   /// workflow that filters and ranks eligible supplier quotations.
-  Future<Map<String, dynamic>> startProcurementWorkflow(int materialRequestId) async {
+  Future<Map<String, dynamic>> startProcurementWorkflow(
+    int materialRequestId,
+  ) async {
     final response = await _apiClient.post(
       '/material-requests/$materialRequestId/procurement-workflow',
       timeout: _agentTimeout,
@@ -200,8 +231,14 @@ class OperationsService {
   }
 
   /// Agent workflow runs, newest first. The backend returns a paged envelope.
-  Future<Map<String, dynamic>> listAgentWorkflows({int page = 1, int pageSize = 20}) async {
-    final response = await _apiClient.get('/agent-workflows?page=$page&pageSize=$pageSize');
+  Future<Map<String, dynamic>> listAgentWorkflows({
+    int page = 1,
+    int pageSize = 20,
+    String? status,
+  }) async {
+    final response = await _apiClient.get(
+      '/agent-workflows?page=$page&pageSize=$pageSize${status == null || status == 'all' ? '' : '&status=${Uri.encodeQueryComponent(status)}'}',
+    );
     return _map(response, 'load agent workflows');
   }
 
@@ -216,7 +253,9 @@ class OperationsService {
   /// Returns a bare JSON array (not a paged envelope), so this is a list
   /// response — casting it to a map would throw at runtime.
   Future<List<dynamic>> listUsers({String? search}) async {
-    final query = (search == null || search.isEmpty) ? '' : '?search=${Uri.encodeQueryComponent(search)}';
+    final query = (search == null || search.isEmpty)
+        ? ''
+        : '?search=${Uri.encodeQueryComponent(search)}';
     final response = await _apiClient.get('/admin/users$query');
     if (response.statusCode != 200) {
       throw Exception(_error(response, 'Could not load users'));
@@ -224,9 +263,29 @@ class OperationsService {
     return jsonDecode(response.body) as List<dynamic>;
   }
 
+  Future<Map<String, dynamic>> createUser(Map<String, dynamic> payload) async =>
+      _map(await _apiClient.post('/admin/users', body: payload), 'create user');
+
+  Future<Map<String, dynamic>> setUserActive(int id, bool isActive) async =>
+      _map(
+        await _apiClient.patch(
+          '/admin/users/$id/active',
+          body: {'isActive': isActive},
+        ),
+        'update account status',
+      );
+
+  Future<Map<String, dynamic>> setUserRoles(int id, List<String> roles) async =>
+      _map(
+        await _apiClient.put('/admin/users/$id/roles', body: {'roles': roles}),
+        'update account roles',
+      );
+
   /// Administrator-only: recent audit trail. Also a bare JSON array.
   Future<List<dynamic>> listAuditLogs({int pageSize = 25}) async {
-    final response = await _apiClient.get('/admin/audit-logs?pageSize=$pageSize');
+    final response = await _apiClient.get(
+      '/admin/audit-logs?pageSize=$pageSize',
+    );
     if (response.statusCode != 200) {
       throw Exception(_error(response, 'Could not load audit logs'));
     }
@@ -235,15 +294,19 @@ class OperationsService {
 
   /// Administrator-only: per-service health, including the four AI agents.
   Future<Map<String, dynamic>> getSystemHealth() async {
-    final response = await _apiClient.get('/admin/health', timeout: _agentTimeout);
+    final response = await _apiClient.get(
+      '/admin/health',
+      timeout: _agentTimeout,
+    );
     return _map(response, 'load system health');
   }
 
   static const Duration _agentTimeout = Duration(seconds: 90);
 
-
   Future<List<Map<String, dynamic>>> listNonConformances() async {
-    final response = await _apiClient.get('/quality-inspections/non-conformances');
+    final response = await _apiClient.get(
+      '/quality-inspections/non-conformances',
+    );
     return _list(response, 'non-conformances');
   }
 
@@ -271,35 +334,51 @@ class OperationsService {
     String? notes,
     List<Map<String, dynamic>> evidence = const [],
   }) async {
-    final response = await _apiClient.post('/quality-inspections', body: {
-      'deliveryId': deliveryId,
-      'inspectionCriteria': criteria,
-      'observedResult': observedResult,
-      'notes': notes,
-      'quantityCheck': quantityCheck,
-      'visualConditionCheck': visualConditionCheck,
-      'moistureCheck': moistureCheck,
-      'packagingCheck': packagingCheck,
-      'defectsCheck': defectsCheck,
-      'evidence': evidence,
-      'items': [{
-        'materialId': materialId,
-        'inspectedQuantity': inspected,
-        'acceptedQuantity': accepted,
-        'rejectedQuantity': rejected,
-        'rejectionReason': reason,
-      }],
-    });
+    final response = await _apiClient.post(
+      '/quality-inspections',
+      body: {
+        'deliveryId': deliveryId,
+        'inspectionCriteria': criteria,
+        'observedResult': observedResult,
+        'notes': notes,
+        'quantityCheck': quantityCheck,
+        'visualConditionCheck': visualConditionCheck,
+        'moistureCheck': moistureCheck,
+        'packagingCheck': packagingCheck,
+        'defectsCheck': defectsCheck,
+        'evidence': evidence,
+        'items': [
+          {
+            'materialId': materialId,
+            'inspectedQuantity': inspected,
+            'acceptedQuantity': accepted,
+            'rejectedQuantity': rejected,
+            'rejectionReason': reason,
+          },
+        ],
+      },
+      timeout: _agentTimeout,
+    );
     return _map(response, 'complete inspection');
   }
 
-  Future<Map<String, dynamic>> transitionNonConformance(int id, Map<String, dynamic> payload) async {
-    final response = await _apiClient.post('/quality-inspections/non-conformances/$id/transition', body: payload);
+  Future<Map<String, dynamic>> transitionNonConformance(
+    int id,
+    Map<String, dynamic> payload,
+  ) async {
+    final response = await _apiClient.post(
+      '/quality-inspections/non-conformances/$id/transition',
+      body: payload,
+    );
     return _map(response, 'update non-conformance');
   }
 
-  Future<List<Map<String, dynamic>>> listNotifications({bool unreadOnly = false}) async {
-    final response = await _apiClient.get('/notifications?unreadOnly=$unreadOnly');
+  Future<List<Map<String, dynamic>>> listNotifications({
+    bool unreadOnly = false,
+  }) async {
+    final response = await _apiClient.get(
+      '/notifications?unreadOnly=$unreadOnly',
+    );
     return _list(response, 'notifications');
   }
 

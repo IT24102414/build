@@ -45,31 +45,38 @@ public class SmtpEmailService : IEmailService
         var enableSsl = !bool.TryParse(section["EnableSsl"], out var ssl) || ssl;
         var username = section["Username"];
         var password = section["Password"];
-        var fromAddress = section["FromAddress"] ?? username ?? "noreply@buildwise.local";
+        var fromAddress = !string.IsNullOrWhiteSpace(section["FromAddress"])
+            ? section["FromAddress"]!.Trim()
+            : username;
         var fromName = section["FromName"] ?? "BuildWise Procurement";
         var timeoutMs = int.TryParse(section["TimeoutMs"], out var t) ? t : 8000;
 
-        using var message = new MailMessage
-        {
-            From = new MailAddress(fromAddress, fromName),
-            Subject = subject,
-            Body = body,
-            IsBodyHtml = false
-        };
-        message.To.Add(toEmail);
-
-        using var client = new SmtpClient(host, port)
-        {
-            EnableSsl = enableSsl,
-            Timeout = timeoutMs
-        };
-        if (!string.IsNullOrWhiteSpace(username))
-        {
-            client.Credentials = new NetworkCredential(username, password);
-        }
-
         try
         {
+            if (string.IsNullOrWhiteSpace(fromAddress))
+                throw new InvalidOperationException("SMTP requires a FromAddress or Username.");
+            if (port is < 1 or > 65535 || timeoutMs <= 0)
+                throw new InvalidOperationException("SMTP port or timeout is invalid.");
+
+            using var message = new MailMessage
+            {
+                From = new MailAddress(fromAddress, fromName),
+                Subject = subject,
+                Body = body,
+                IsBodyHtml = false
+            };
+            message.To.Add(toEmail);
+
+            using var client = new SmtpClient(host, port)
+            {
+                EnableSsl = enableSsl,
+                Timeout = timeoutMs
+            };
+            if (!string.IsNullOrWhiteSpace(username))
+            {
+                client.Credentials = new NetworkCredential(username, password);
+            }
+
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(timeoutMs);
             await client.SendMailAsync(message, cts.Token);

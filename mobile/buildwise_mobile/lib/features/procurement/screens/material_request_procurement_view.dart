@@ -47,7 +47,9 @@ class _MaterialRequestProcurementViewState
   Future<ProcurementStatusInfo> _load({required bool notifyOnChange}) async {
     final info = await _service.getStatus(widget.materialRequestId);
 
-    if (notifyOnChange && _lastNotifiedStatus != null && _lastNotifiedStatus != info.status) {
+    if (notifyOnChange &&
+        _lastNotifiedStatus != null &&
+        _lastNotifiedStatus != info.status) {
       await _notifyStatusChange(info);
     }
     _lastNotifiedStatus = info.status;
@@ -61,13 +63,15 @@ class _MaterialRequestProcurementViewState
         await _notifications.showProcurementUpdate(
           id: widget.materialRequestId,
           title: 'Procurement recommendation awaiting approval',
-          body: 'Request #${info.materialRequestId} has a recommendation ready for manager review.',
+          body:
+              'Request #${info.materialRequestId} has a recommendation ready for manager review.',
         );
       case ProcurementStatus.purchaseOrderCreated:
         await _notifications.showProcurementUpdate(
           id: widget.materialRequestId,
           title: 'Purchase Order created',
-          body: 'Request #${info.materialRequestId} — PO #${info.purchaseOrderId} has been created.',
+          body:
+              'Request #${info.materialRequestId} — PO #${info.purchaseOrderId} has been created.',
         );
       default:
         break;

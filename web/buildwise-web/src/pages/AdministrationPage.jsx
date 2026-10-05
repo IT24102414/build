@@ -20,6 +20,44 @@ const INITIAL_USER_FORM = {
   password: 'Passw0rd!'
 }
 
+function auditAction(event) {
+  const path = event.requestPath || ''
+  const rules = [
+    [/^\/api\/quality-inspections\/\d+\/risk-analysis$/, 'Analyze inspection risk'],
+    [/^\/api\/quality-inspections$/, 'Create quality inspection'],
+    [/^\/api\/deliveries\/\d+\/discrepancy-analysis$/, 'Analyze delivery discrepancies'],
+    [/^\/api\/deliveries$/, 'Record delivery'],
+    [/^\/api\/procurement-workflow\/\d+\/decision$/, 'Record procurement decision'],
+    [/^\/api\/projects\/\d+\/budget$/, 'Update project budget'],
+    [/^\/api\/material-requests\/\d+\/procurement-workflow$/, 'Run quotation analysis'],
+    [/^\/api\/material-requests\/\d+\/quotations$/, 'Record quotation'],
+    [/^\/api\/rfqs\/\d+\/send-email$/, 'Request RFQ email delivery'],
+    [/^\/api\/rfqs\/\d+\/close$/, 'Close RFQ'],
+    [/^\/api\/rfqs$/, 'Create RFQ'],
+    [/^\/api\/suppliers$/, 'Create supplier'],
+    [/^\/api\/material-requests\/\d+\/approval$/, 'Record material request decision'],
+    [/^\/api\/agent\/analyze-request\/\d+$/, 'Analyze material request'],
+    [/^\/api\/material-requests$/, 'Create material request'],
+  ]
+  if (event.httpMethod === 'POST' || path.endsWith('/budget')) {
+    const match = rules.find(([pattern]) => pattern.test(path))
+    if (match) return match[1]
+  }
+  return event.action || 'API action'
+}
+
+function auditStatus(code) {
+  if (!Number.isFinite(Number(code)) || code == null) return 'Unknown'
+  if (code >= 500) return 'Server error'
+  if (code === 400) return 'Rejected'
+  if (code === 401) return 'Unauthenticated'
+  if (code === 403) return 'Forbidden'
+  if (code >= 400) return 'Failed'
+  if (code >= 300) return 'Redirected'
+  if (code >= 200) return 'Request successful'
+  return 'Informational'
+}
+
 export default function AdministrationPage() {
   const [users, setUsers] = useState([])
   const [audit, setAudit] = useState([])
@@ -194,7 +232,7 @@ export default function AdministrationPage() {
         </Card>
       </div>
 
-      <Card title="Recent audit events" subtitle="Authenticated state-changing API requests, without request bodies or secrets">
+      <Card title="Recent audit events" subtitle="Recorded API actions · Times shown in Sri Lanka time (UTC+05:30). HTTP success does not confirm email delivery.">
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -216,13 +254,13 @@ export default function AdministrationPage() {
               ) : (
                 audit.map((event) => (
                   <tr key={event.id}>
-                    <td>{new Date(event.createdAt).toLocaleString()}</td>
-                    <td>{event.userId ? `User #${event.userId}` : 'System'}</td>
-                    <td><strong>{event.action}</strong></td>
-                    <td><code>{event.httpMethod} {event.requestPath}</code></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(event.createdAt).toLocaleString('en-GB', { timeZone: 'Asia/Colombo' })}</td>
+                    <td>{event.userId ? (users.find((user) => user.id === event.userId)?.fullName || `User #${event.userId}`) : 'System'}</td>
+                    <td><strong>{auditAction(event)}</strong></td>
+                    <td><code style={{ overflowWrap: 'anywhere', whiteSpace: 'normal' }}>{event.httpMethod} {event.requestPath}</code></td>
                     <td>
                       <StatusBadge status={event.statusCode < 400 ? 'success' : 'danger'}>
-                        {event.statusCode}
+                        {auditStatus(event.statusCode)}{event.statusCode != null ? ` (${event.statusCode})` : ''}
                       </StatusBadge>
                     </td>
                   </tr>

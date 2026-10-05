@@ -13,9 +13,9 @@ class MockQualityOperationsService extends OperationsService {
           'materialId': 1,
           'materialName': 'Cement (50kg bag)',
           'receivedQuantity': 240,
-        }
+        },
       ],
-    }
+    },
   ];
 
   List<Map<String, dynamic>> mockInspections = [
@@ -35,9 +35,9 @@ class MockQualityOperationsService extends OperationsService {
           'inspectedQuantity': 240,
           'acceptedQuantity': 235,
           'rejectedQuantity': 5,
-        }
+        },
       ],
-    }
+    },
   ];
 
   List<Map<String, dynamic>> mockNcrs = [
@@ -50,7 +50,7 @@ class MockQualityOperationsService extends OperationsService {
       'issueDescription': 'Water damage during transport.',
       'correctiveAction': 'Issue credit note or replacement.',
       'createdAt': '2026-09-28T08:32:42Z',
-    }
+    },
   ];
 
   bool inspectionCreated = false;
@@ -60,7 +60,8 @@ class MockQualityOperationsService extends OperationsService {
   Future<List<Map<String, dynamic>>> listDeliveries() async => mockDeliveries;
 
   @override
-  Future<List<Map<String, dynamic>>> listInspections({String? status}) async => mockInspections;
+  Future<List<Map<String, dynamic>>> listInspections({String? status}) async =>
+      mockInspections;
 
   @override
   Future<List<Map<String, dynamic>>> listNonConformances() async => mockNcrs;
@@ -98,13 +99,56 @@ class MockQualityOperationsService extends OperationsService {
       'defectsCheck': defectsCheck,
       'evidence': evidence,
     };
-    return {'id': 36, 'overallDecision': rejected > 0 ? 'PartiallyAccepted' : 'Accepted'};
+    return {
+      'id': 36,
+      'overallDecision': rejected > 0 ? 'PartiallyAccepted' : 'Accepted',
+    };
   }
 }
 
 void main() {
   group('QualityInspectionScreen 5-Point Checklist & NCR Tests', () {
-    testWidgets('Renders quality stats, inspection history and active NCRs', (tester) async {
+    testWidgets(
+      'selects another delivery material and preserves fractional accepted quantity',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final service = MockQualityOperationsService();
+        (service.mockDeliveries.first['items'] as List).add({
+          'materialId': 2,
+          'materialName': 'Steel 12mm',
+          'receivedQuantity': 20,
+        });
+        await tester.pumpWidget(
+          MaterialApp(home: QualityInspectionScreen(service: service)),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(DropdownButtonFormField<String>));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('34').last);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.widgetWithText(DropdownButtonFormField<String>, 'Material'),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Steel 12mm').last);
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Inspected Quantity'),
+          '10.125',
+        );
+        await tester.ensureVisible(find.text('Submit Inspection'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Submit Inspection'));
+        await tester.pumpAndSettle();
+        expect(service.lastInspectionPayload?['materialId'], 2);
+        expect(service.lastInspectionPayload?['accepted'], 10.125);
+      },
+    );
+    testWidgets('Renders quality stats, inspection history and active NCRs', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -112,14 +156,12 @@ void main() {
       final mockService = MockQualityOperationsService();
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: QualityInspectionScreen(service: mockService),
-        ),
+        MaterialApp(home: QualityInspectionScreen(service: mockService)),
       );
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Quality & NCRs'), findsOneWidget);
+      expect(find.text('Quality Inspections'), findsOneWidget);
       expect(find.text('Open NCRs'), findsOneWidget);
       expect(find.text('High/Critical'), findsOneWidget);
       expect(find.text('INS-34'), findsOneWidget);
@@ -127,71 +169,73 @@ void main() {
       expect(find.text('NCR-781611'), findsOneWidget);
     });
 
-    testWidgets('Selecting delivery opens 5-point checklist with PASS/FAIL switches', (tester) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'Selecting delivery opens 5-point checklist with PASS/FAIL switches',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      final mockService = MockQualityOperationsService();
+        final mockService = MockQualityOperationsService();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: QualityInspectionScreen(service: mockService),
-        ),
-      );
+        await tester.pumpWidget(
+          MaterialApp(home: QualityInspectionScreen(service: mockService)),
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byType(DropdownButtonFormField<String>));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('34').last);
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('34').last);
+        await tester.pumpAndSettle();
 
-      expect(find.text('5-Point Quality Checklist'), findsOneWidget);
-      expect(find.text('Quantity'), findsOneWidget);
-      expect(find.text('Visual condition'), findsOneWidget);
-      expect(find.text('Moisture'), findsOneWidget);
-      expect(find.text('Packaging'), findsOneWidget);
-      expect(find.text('Defects'), findsOneWidget);
-      expect(find.text('PASS'), findsNWidgets(5));
+        expect(find.text('5-Point Quality Checklist'), findsOneWidget);
+        expect(find.text('Quantity'), findsOneWidget);
+        expect(find.text('Visual condition'), findsOneWidget);
+        expect(find.text('Moisture'), findsOneWidget);
+        expect(find.text('Packaging'), findsOneWidget);
+        expect(find.text('Defects'), findsOneWidget);
+        expect(find.text('PASS'), findsNWidgets(5));
 
-      expect(find.text('Inspection Photo Evidence'), findsOneWidget);
-      expect(find.text('📷 Take Photo'), findsOneWidget);
-      expect(find.text('📁 Gallery'), findsOneWidget);
-      expect(find.text('Submit Inspection'), findsOneWidget);
-    });
+        expect(find.text('Inspection Photo Evidence'), findsOneWidget);
+        expect(find.text('📷 Take Photo'), findsOneWidget);
+        expect(find.text('📁 Gallery'), findsOneWidget);
+        expect(find.text('Submit Inspection'), findsOneWidget);
+      },
+    );
 
-    testWidgets('Submitting inspection sends checklist, quantities and evidence payload', (tester) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'Submitting inspection sends checklist, quantities and evidence payload',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      final mockService = MockQualityOperationsService();
+        final mockService = MockQualityOperationsService();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: QualityInspectionScreen(service: mockService),
-        ),
-      );
+        await tester.pumpWidget(
+          MaterialApp(home: QualityInspectionScreen(service: mockService)),
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byType(DropdownButtonFormField<String>));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('34').last);
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('34').last);
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Submit Inspection'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Submit Inspection'));
+        await tester.pumpAndSettle();
 
-      expect(mockService.inspectionCreated, isTrue);
-      expect(mockService.lastInspectionPayload?['deliveryId'], equals(34));
-      expect(mockService.lastInspectionPayload?['inspected'], equals(240.0));
-      expect(mockService.lastInspectionPayload?['accepted'], equals(235.0));
-      expect(mockService.lastInspectionPayload?['rejected'], equals(5.0));
-      expect(mockService.lastInspectionPayload?['quantityCheck'], isTrue);
-    });
+        expect(mockService.inspectionCreated, isTrue);
+        expect(mockService.lastInspectionPayload?['deliveryId'], equals(34));
+        expect(mockService.lastInspectionPayload?['inspected'], equals(240.0));
+        expect(mockService.lastInspectionPayload?['accepted'], equals(240.0));
+        expect(mockService.lastInspectionPayload?['rejected'], equals(0.0));
+        expect(mockService.lastInspectionPayload?['quantityCheck'], isTrue);
+      },
+    );
   });
 }

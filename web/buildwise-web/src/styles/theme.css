@@ -1,10 +1,10 @@
 :root {
-  --color-primary-900: #0a1830;
-  --color-primary-800: #102a4c;
-  --color-primary-700: #1a4270;
-  --color-primary-600: #235792;
-  --color-primary-100: #e7eef8;
-  --color-primary-50: #f2f6fb;
+  --color-primary-900: #0b1f3a;
+  --color-primary-800: #0043a4;
+  --color-primary-700: #0055c8;
+  --color-primary-600: #0067e8;
+  --color-primary-100: #edf5ff;
+  --color-primary-50: #f4f8ff;
 
   --color-accent-700: #b45f04;
   --color-accent-600: #e08a1e;
@@ -20,16 +20,16 @@
   --color-info-700: #1d4ed8;
   --color-info-100: #dbeafe;
 
-  --color-bg: #f6f8fb;
+  --color-bg: #f7fafe;
   --color-surface: #ffffff;
   --color-surface-muted: #f7f9fc;
-  --color-text: #131a2b;
-  --color-text-muted: #667085;
-  --color-border: #e1e6ee;
+  --color-text: #142747;
+  --color-text-muted: #64748b;
+  --color-border: #e2ebf5;
   --color-border-strong: #c9d2e0;
   --color-white: #ffffff;
 
-  --gradient-primary: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-900) 100%);
+  --gradient-primary: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-800) 100%);
   --gradient-accent: linear-gradient(135deg, var(--color-accent-500) 0%, var(--color-accent-700) 100%);
 
   --space-1: 0.25rem;

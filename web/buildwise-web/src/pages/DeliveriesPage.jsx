@@ -10,6 +10,7 @@ import {
   PageHeader,
   SelectInput,
   StatusBadge,
+  SuccessDialog,
   TextInput,
 } from '../components/shared'
 import { qualityApi } from '../services/qualityApi'
@@ -40,9 +41,15 @@ export default function DeliveriesPage() {
   // Both panels are opt-in. The record form and the detail view are no longer
   // permanent page sections, so the list stays the primary content.
   const [isRecordOpen, setIsRecordOpen] = useState(false)
+  // Pop-up confirmation after a receiving entry was saved, mirroring the other
+  // create flows: the drawer closes and the result is shown in front of the user.
+  const [recordedNotice, setRecordedNotice] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const canReceive = hasRole('SiteOfficer') || hasRole('Administrator')
+  // Receiving is the Site Officer's write. The Site Engineer keeps the delivery
+  // workspace to follow the material they requested, but view-only — the API
+  // enforces the same split with the DeliveryReceiversOnly policy.
+  const canReceive = hasRole('SiteOfficer')
 
   async function loadWorkspace() {
     setLoading(true)
@@ -63,7 +70,19 @@ export default function DeliveriesPage() {
     }
   }
 
-  useEffect(() => { loadWorkspace() }, [])
+  useEffect(() => {
+    loadWorkspace()
+    const refresh = async () => {
+      if (document.hidden) return
+      try {
+        const orders = await qualityApi.listConfirmedPurchaseOrders()
+        setPurchaseOrders(Array.isArray(orders) ? orders : (orders.items ?? []))
+      } catch { /* Preserve available orders during a temporary network failure. */ }
+    }
+    const timer = setInterval(refresh, 15000)
+    window.addEventListener('focus', refresh)
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [])
 
   const selectedDelivery = useMemo(
     () => deliveries.find((delivery) => delivery.id === Number(selectedId)) ?? null,
@@ -106,6 +125,7 @@ export default function DeliveriesPage() {
           userName={user?.fullName}
           onRecorded={(created) => {
             setIsRecordOpen(false)
+            setRecordedNotice(created)
             loadWorkspace()
             setSelectedId(created.id)
           }}
@@ -120,6 +140,14 @@ export default function DeliveriesPage() {
       >
         {selectedDelivery && <DeliveryDetail delivery={selectedDelivery} />}
       </Drawer>
+
+      <SuccessDialog
+        open={recordedNotice != null}
+        title={recordedNotice ? `Delivery #${recordedNotice.id} recorded` : 'Delivery recorded'}
+        message="The receiving entry was saved. The delivery detail is now open for review."
+        confirmLabel="OK"
+        onClose={() => setRecordedNotice(null)}
+      />
     </div>
   )
 }

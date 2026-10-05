@@ -62,7 +62,9 @@ public class DeliveriesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Policy = Policies.SiteOperationsOnly)]
+    // Receiving is the Site Officer's write. The Site Engineer keeps read access
+    // through DeliveryParticipantsOnly on the class, but cannot sign for goods.
+    [Authorize(Policy = Policies.DeliveryReceiversOnly)]
     public async Task<IActionResult> Record([FromBody] Delivery delivery)
     {
         try

@@ -73,7 +73,7 @@ export default function DashboardPage() {
 
   const metricMap = useMemo(() => new Map((dashboard?.metrics ?? []).map((metric) => [metric.key, metric])), [dashboard])
   const metricKeys = {
-    SiteEngineer: ['activeRequests', 'awaitingProcurement', 'approvedPendingDelivery'],
+    SiteEngineer: ['activeRequests', 'awaitingProcurement'],
     SiteOfficer: ['deliveriesExpectedToday', 'deliveriesReconciled', 'discrepanciesLogged'],
     ProcurementOfficer: ['awaitingProcurement', 'activeRfqs', 'quotationsToday'],
     ProcurementManager: ['proposalsAwaitingApproval', 'confirmedPurchaseOrders', 'monthlySpend'],
@@ -89,9 +89,12 @@ export default function DashboardPage() {
     <div className="stack">
       <PageHeader eyebrow={copy.eyebrow} title={copy.title} description={copy.description} actions={<StatusBadge tone="info">{user?.fullName ?? 'Signed in'}</StatusBadge>} />
       <div className="metric-grid">
-        {metricKeys.map((key) => {
+        {metricKeys.map((key, index) => {
           const metric = metricMap.get(key)
-          return <Card key={key} className="summary-card" title={metric?.label ?? key}><div className="summary-card__value">{formatValue(metric ?? { value: 0 })}</div><div className="summary-card__note">Live from the authenticated API</div></Card>
+          const label = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, letter => letter.toUpperCase())
+          const color = ['var(--color-primary-700)', 'var(--color-warning-700)', 'var(--color-success-700)', '#7040d8'][index % 4]
+          const backgroundColor = ['#edf5ff', '#fff6e5', '#ecfaf4', '#f4efff'][index % 4]
+          return <Card key={key} className="summary-card" title={metric?.label ?? label} style={{ '--summary-color': color, backgroundColor }}><div className="summary-card__value" style={{ color }}>{formatValue(metric ?? { value: 0 })}</div><div className="summary-card__note">Live from the authenticated API</div></Card>
         })}
       </div>
       <div className="dashboard-columns">

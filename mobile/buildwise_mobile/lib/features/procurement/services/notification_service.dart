@@ -10,7 +10,8 @@ class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
   Future<void> initialize() async {
@@ -27,7 +28,9 @@ class NotificationService {
     await _plugin.initialize(settings);
 
     final androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await androidPlugin?.requestNotificationsPermission();
 
     _initialized = true;
@@ -42,11 +45,15 @@ class NotificationService {
     const androidDetails = AndroidNotificationDetails(
       'quality_updates',
       'Quality updates',
-      channelDescription: 'Notifies when inspection and NCR results are available.',
+      channelDescription:
+          'Notifies when inspection and NCR results are available.',
       importance: Importance.high,
       priority: Priority.high,
     );
-    const details = NotificationDetails(android: androidDetails, iOS: DarwinNotificationDetails());
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
     await _plugin.show(id, title, body, details);
   }
 
@@ -60,7 +67,8 @@ class NotificationService {
     const androidDetails = AndroidNotificationDetails(
       'procurement_updates',
       'Procurement updates',
-      channelDescription: 'Notifies when a material request\'s procurement status changes.',
+      channelDescription:
+          'Notifies when a material request\'s procurement status changes.',
       importance: Importance.high,
       priority: Priority.high,
     );

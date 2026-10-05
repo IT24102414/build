@@ -35,11 +35,7 @@ const _demoPassword = 'Passw0rd!';
 /// Shared BuildWise sign-in screen (spec §8's "Registration, login, logout,
 /// secure token storage and protected screens" requirement).
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({
-    super.key,
-    required this.onSignedIn,
-    this.authService,
-  });
+  const LoginScreen({super.key, required this.onSignedIn, this.authService});
 
   final VoidCallback onSignedIn;
   final AuthService? authService;
@@ -63,15 +59,30 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
+    final email = _emailController.text.trim();
+    if (!RegExp(r'^[^\s@]+@[^\s@]+$').hasMatch(email)) {
+      setState(() => _error = 'Enter a valid email address.');
+      return;
+    }
+    if (_passwordController.text.isEmpty) {
+      setState(() => _error = 'Password is required.');
+      return;
+    }
     setState(() {
       _submitting = true;
       _error = null;
     });
     try {
-      await _authService.login(_emailController.text.trim(), _passwordController.text);
-      widget.onSignedIn();
+      await _authService.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+      if (mounted) widget.onSignedIn();
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -86,74 +97,197 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const SizedBox(height: 24),
-          Row(
+      child: Center(
+        child: SizedBox(
+          width: 440,
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
-                alignment: Alignment.center,
-                child: const Text('BW', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 12),
-              const Text('BuildWise', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: 24),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Sign in', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                AppTextField(label: 'Email', controller: _emailController, keyboardType: TextInputType.emailAddress),
-                const SizedBox(height: 12),
-                AppTextField(label: 'Password', controller: _passwordController, obscureText: true),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_error!, style: const TextStyle(color: AppColors.danger)),
-                ],
-                const SizedBox(height: 16),
-                AppButton(
-                  label: _submitting ? 'Signing in…' : 'Sign in',
-                  expand: true,
-                  onPressed: _submitting ? null : _submit,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Quick demo login', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                // Same wording as the web app, so the two login screens read
-                // identically during a walkthrough.
-                const Text(
-                  'Seeded accounts for evaluation — one per role.',
-                  style: TextStyle(color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 12),
-                ..._demoAccounts.map(
-                  (account) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: OutlinedButton(
-                      onPressed: _submitting ? null : () => _demoLogin(account),
-                      style: OutlinedButton.styleFrom(alignment: Alignment.centerLeft),
-                      child: Text('${account.label} — ${account.email}'),
+              Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppColors.primaryDark, AppColors.primary],
+                      ),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: const Text(
+                      'BW',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'BuildWise',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.text,
+                          ),
+                        ),
+                        Text(
+                          'Construction Procurement & Quality Management',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              AppCard(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sign in',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Text(
+                      'Use your BuildWise account to continue.',
+                      style: TextStyle(color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 12),
+                    AppTextField(
+                      label: 'Email',
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                    ),
+                    const SizedBox(height: 12),
+                    AppTextField(
+                      label: 'Password',
+                      controller: _passwordController,
+                      obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _submit(),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: AppColors.danger),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    AppButton(
+                      label: _submitting ? 'Signing in…' : 'Sign in',
+                      expand: true,
+                      onPressed: _submitting ? null : _submit,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Quick demo login',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    // Same wording as the web app, so the two login screens read
+                    // identically during a walkthrough.
+                    const Text(
+                      'Seeded accounts for evaluation — one per role.',
+                      style: TextStyle(color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = MediaQuery.sizeOf(context).width > 480
+                            ? 2
+                            : 1;
+                        final width =
+                            (constraints.maxWidth - (columns - 1) * 12) /
+                            columns;
+                        return Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            for (final account in _demoAccounts)
+                              SizedBox(
+                                width: width,
+                                child: Semantics(
+                                  label: '${account.label} - ${account.email}',
+                                  button: true,
+                                  child: OutlinedButton(
+                                    onPressed: _submitting
+                                        ? null
+                                        : () => _demoLogin(account),
+                                    style: OutlinedButton.styleFrom(
+                                      alignment: Alignment.centerLeft,
+                                      side: const BorderSide(
+                                        color: AppColors.border,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          account.label,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primaryDark,
+                                          ),
+                                        ),
+                                        Text(
+                                          account.email,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w400,
+                                            color: AppColors.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Demo password for every seeded account: Passw0rd!',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     ),
   );

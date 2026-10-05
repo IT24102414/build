@@ -22,7 +22,7 @@
 .card__title { font-size: var(--font-lg); font-weight: 700; margin-bottom: var(--space-1); letter-spacing: -0.015em; }
 .card__subtitle { color: var(--color-text-muted); font-size: var(--font-sm); margin-bottom: var(--space-5); }
 
-.field { display: grid; gap: var(--space-2); }
+.field { display: grid; gap: var(--space-2); min-width: 0; }
 .field__label { font-size: var(--font-sm); font-weight: 650; color: var(--color-text); }
 .field__required { color: var(--color-danger-700); }
 .field__control { width: 100%; border: 1.5px solid var(--color-border); border-radius: var(--radius-md); padding: 0.7rem 0.85rem; color: var(--color-text); background: var(--color-white); transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out); }
@@ -32,6 +32,15 @@
 .field__control[aria-invalid="true"]:focus { box-shadow: 0 0 0 4px rgb(185 28 28 / 0.1); }
 .field__hint { font-size: var(--font-xs); color: var(--color-text-muted); }
 .field__error { font-size: var(--font-xs); color: var(--color-danger-700); font-weight: 600; }
+
+/* Type-ahead: a text box that suggests the record the typed text points at.
+   The list sits under the control in normal document flow, so it cannot be
+   clipped by a card's overflow and needs no portal. */
+.field--typeahead { position: relative; }
+.typeahead__list { list-style: none; margin: 0.25rem 0 0; padding: 0.25rem; border: 1.5px solid var(--color-border-strong); border-radius: var(--radius-md); background: var(--color-white); box-shadow: var(--shadow-md); max-height: 240px; overflow-y: auto; }
+.typeahead__option { padding: 0.5rem 0.65rem; border-radius: var(--radius-sm); font-size: var(--font-sm); color: var(--color-text); cursor: pointer; }
+.typeahead__option:hover, .typeahead__option--active { background: var(--color-surface-muted); }
+.typeahead__option[aria-selected="true"] { font-weight: 650; color: var(--color-primary-700); }
 .search { position: relative; min-width: 240px; }
 .search__icon { position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); pointer-events: none; }
 .search .field__control { padding-left: 2.4rem; }

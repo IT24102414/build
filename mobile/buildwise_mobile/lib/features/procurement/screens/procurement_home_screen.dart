@@ -44,10 +44,16 @@ class _ProcurementHomeScreenState extends State<ProcurementHomeScreen> {
       if (!mounted) return;
       setState(() {
         _requests = requests;
-        _selectedId = requests.isEmpty ? null : (requests.first['id'] as num).toInt();
+        _selectedId = requests.isEmpty
+            ? null
+            : (requests.first['id'] as num).toInt();
       });
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(
+          () => _error = error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -62,28 +68,36 @@ class _ProcurementHomeScreenState extends State<ProcurementHomeScreen> {
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : _error != null
-            ? buildwise.ErrorWidget(message: _error!, onRetry: _load)
-            : _requests.isEmpty
-                ? const Center(child: Text('No approved material requests are available.'))
-                : ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      DropdownButtonFormField<int>(
-                        initialValue: _selectedId,
-                        decoration: const InputDecoration(labelText: 'Material request'),
-                        items: _requests.map((request) => DropdownMenuItem<int>(
-                          value: (request['id'] as num).toInt(),
-                          child: Text(
-                           FieldFormat.materialRequestLabel(request),
-                           overflow: TextOverflow.ellipsis,
-                         ),
-                        )).toList(),
-                        onChanged: (value) => setState(() => _selectedId = value),
+        ? buildwise.ErrorWidget(message: _error!, onRetry: _load)
+        : _requests.isEmpty
+        ? const Center(
+            child: Text('No approved material requests are available.'),
+          )
+        : ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              DropdownButtonFormField<int>(
+                initialValue: _selectedId,
+                decoration: const InputDecoration(
+                  labelText: 'Material request',
+                ),
+                items: _requests
+                    .map(
+                      (request) => DropdownMenuItem<int>(
+                        value: (request['id'] as num).toInt(),
+                        child: Text(
+                          FieldFormat.materialRequestLabel(request),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      const SizedBox(height: 18),
-                      if (_selectedId != null)
-                        MaterialRequestProcurementView(materialRequestId: _selectedId!),
-                    ],
-                  ),
+                    )
+                    .toList(),
+                onChanged: (value) => setState(() => _selectedId = value),
+              ),
+              const SizedBox(height: 18),
+              if (_selectedId != null)
+                MaterialRequestProcurementView(materialRequestId: _selectedId!),
+            ],
+          ),
   );
 }

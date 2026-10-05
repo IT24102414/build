@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/error_widget.dart' as buildwise;
@@ -6,16 +8,24 @@ import '../services/operations_service.dart';
 import '../widgets/agent_analysis_panels.dart';
 
 class DeliveryReceivingScreen extends StatefulWidget {
-  const DeliveryReceivingScreen({super.key, this.service, this.readOnly = false});
+  const DeliveryReceivingScreen({
+    super.key,
+    this.service,
+    this.readOnly = false,
+    this.autoRefresh = true,
+  });
   final OperationsService? service;
   final bool readOnly;
+  final bool autoRefresh;
 
   @override
-  State<DeliveryReceivingScreen> createState() => _DeliveryReceivingScreenState();
+  State<DeliveryReceivingScreen> createState() =>
+      _DeliveryReceivingScreenState();
 }
 
 class _DeliveryReceivingScreenState extends State<DeliveryReceivingScreen> {
   final _service = OperationsService();
+  Timer? _refreshTimer;
   List<Map<String, dynamic>> _orders = const [];
   List<Map<String, dynamic>> _deliveries = const [];
   Map<String, dynamic>? _selected;
@@ -26,10 +36,34 @@ class _DeliveryReceivingScreenState extends State<DeliveryReceivingScreen> {
   void initState() {
     super.initState();
     _load();
+    if (widget.autoRefresh) {
+      _refreshTimer = Timer.periodic(
+        const Duration(seconds: 15),
+        (_) => _refreshOrders(),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshOrders() async {
+    try {
+      final orders = await (widget.service ?? _service).listConfirmedOrders();
+      if (mounted) setState(() => _orders = orders);
+    } catch (_) {
+      /* Keep the order list during a temporary network failure. */
+    }
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final orders = await (widget.service ?? _service).listConfirmedOrders();
       final deliveries = await (widget.service ?? _service).listDeliveries();
@@ -40,7 +74,9 @@ class _DeliveryReceivingScreenState extends State<DeliveryReceivingScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -68,52 +104,65 @@ class _DeliveryReceivingScreenState extends State<DeliveryReceivingScreen> {
     body: _loading
         ? const Center(child: CircularProgressIndicator())
         : _error != null
-            ? buildwise.ErrorWidget(message: _error!, onRetry: _load)
-            : _orders.isEmpty
-                ? const EmptyStateWidget(
-                    title: 'No confirmed purchase orders',
-                    message: 'A delivery can only be received against a Confirmed PO.',
-                  )
-                : ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      AppDropdown(
-                        label: 'Confirmed Purchase Order',
-                        value: _selected == null ? null : _selected!['id'].toString(),
-                        items: _orders.map((order) => order['id'].toString()).toList(),
-                        onChanged: (value) => setState(() {
-                          _selected = _orders.firstWhere((order) => order['id'].toString() == value);
-                        }),
-                      ),
-                      if (!widget.readOnly && _selected != null) ...[
-                        const SizedBox(height: 16),
-                        AppCard(child: _ReceiveForm(
-                          order: _selected!,
-                          service: widget.service ?? _service,
-                          onSaved: _load,
-                        )),
-                      ],
-                      const SizedBox(height: 28),
-                      Text('Recorded Deliveries', style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Run the Delivery Discrepancy Agent over a received delivery to detect '
-                        'shortage, over-receipt and damage.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 10),
-                      if (_deliveries.isEmpty)
-                        const AppCard(child: Text('No deliveries recorded yet.'))
-                      else
-                        ..._deliveries.map((delivery) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: _DeliveryCard(
-                                delivery: delivery,
-                                onAnalyze: () => _analyzeDelivery(delivery),
-                              ),
-                            )),
-                    ],
+        ? buildwise.ErrorWidget(message: _error!, onRetry: _load)
+        : ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (!widget.readOnly && _orders.isEmpty)
+                const AppCard(
+                  child: Text(
+                    'No confirmed purchase orders. Recorded deliveries remain available below.',
                   ),
+                ),
+              if (!widget.readOnly && _orders.isNotEmpty)
+                AppDropdown(
+                  label: 'Confirmed Purchase Order',
+                  value: _selected == null ? null : _selected!['id'].toString(),
+                  items: _orders
+                      .map((order) => order['id'].toString())
+                      .toList(),
+                  onChanged: (value) => setState(() {
+                    _selected = _orders.firstWhere(
+                      (order) => order['id'].toString() == value,
+                    );
+                  }),
+                ),
+              if (!widget.readOnly && _selected != null) ...[
+                const SizedBox(height: 16),
+                AppCard(
+                  child: _ReceiveForm(
+                    order: _selected!,
+                    service: widget.service ?? _service,
+                    onSaved: _load,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 28),
+              Text(
+                'Recorded Deliveries',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Run the Delivery Discrepancy Agent over a received delivery to detect '
+                'shortage, over-receipt and damage.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 10),
+              if (_deliveries.isEmpty)
+                const AppCard(child: Text('No deliveries recorded yet.'))
+              else
+                ..._deliveries.map(
+                  (delivery) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _DeliveryCard(
+                      delivery: delivery,
+                      onAnalyze: () => _analyzeDelivery(delivery),
+                    ),
+                  ),
+                ),
+            ],
+          ),
   );
 }
 
@@ -159,15 +208,19 @@ class _DeliveryCard extends StatelessWidget {
 }
 
 StatusTone _deliveryTone(String status) => switch (status) {
-      'Received' => StatusTone.success,
-      'Confirmed' => StatusTone.info,
-      'PartiallyReceived' || 'ReceivingInProgress' => StatusTone.warning,
-      'DiscrepancyReported' => StatusTone.danger,
-      _ => StatusTone.neutral,
-    };
+  'Received' => StatusTone.success,
+  'Confirmed' => StatusTone.info,
+  'PartiallyReceived' || 'ReceivingInProgress' => StatusTone.warning,
+  'DiscrepancyReported' => StatusTone.danger,
+  _ => StatusTone.neutral,
+};
 
 class _ReceiveForm extends StatefulWidget {
-  const _ReceiveForm({required this.order, required this.service, required this.onSaved});
+  const _ReceiveForm({
+    required this.order,
+    required this.service,
+    required this.onSaved,
+  });
   final Map<String, dynamic> order;
   final OperationsService service;
   final Future<void> Function() onSaved;
@@ -223,21 +276,30 @@ class _ReceiveFormState extends State<_ReceiveForm> {
   }
 
   void _initControllers() {
-    final items = (widget.order['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    final items = (widget.order['items'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
     _lines.clear();
     for (final item in items) {
-      final id = (item['id'] as num?)?.toInt() ?? (item['materialId'] as num?)?.toInt() ?? 0;
+      final id =
+          (item['id'] as num?)?.toInt() ??
+          (item['materialId'] as num?)?.toInt() ??
+          0;
       final ordered = (item['orderedQuantity'] as num?)?.toDouble() ?? 0.0;
       _lines[id] = _OrderLine(
         id: id,
         ordered: ordered,
         materialName: item['materialName']?.toString() ?? 'Item',
-        unit: item['materialUnit']?.toString() ??
+        unit:
+            item['materialUnit']?.toString() ??
             item['unit']?.toString() ??
             'units',
       );
       _receivedControllers[id] = TextEditingController(
-        text: ordered > 0 ? (ordered % 1 == 0 ? ordered.toInt().toString() : ordered.toString()) : '0',
+        text: ordered > 0
+            ? (ordered % 1 == 0
+                  ? ordered.toInt().toString()
+                  : ordered.toString())
+            : '0',
       );
       _damagedControllers[id] = TextEditingController(text: '0');
     }
@@ -264,11 +326,14 @@ class _ReceiveFormState extends State<_ReceiveForm> {
   Future<void> _submit() async {
     final ref = _reference.text.trim();
     if (ref.isEmpty) {
-      setState(() => _error = 'Please enter a delivery reference or invoice number.');
+      setState(
+        () => _error = 'Please enter a delivery reference or invoice number.',
+      );
       return;
     }
 
-    final rawItems = (widget.order['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    final rawItems = (widget.order['items'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
     if (rawItems.isEmpty) {
       setState(() => _error = 'The selected Purchase Order has no line items.');
       return;
@@ -276,7 +341,10 @@ class _ReceiveFormState extends State<_ReceiveForm> {
 
     final payloadItems = <Map<String, dynamic>>[];
     for (final item in rawItems) {
-      final id = (item['id'] as num?)?.toInt() ?? (item['materialId'] as num?)?.toInt() ?? 0;
+      final id =
+          (item['id'] as num?)?.toInt() ??
+          (item['materialId'] as num?)?.toInt() ??
+          0;
       final materialId = (item['materialId'] as num?)?.toInt() ?? id;
       final ordered = (item['orderedQuantity'] as num?)?.toDouble() ?? 0.0;
       final matName = item['materialName']?.toString() ?? 'Item';
@@ -286,16 +354,28 @@ class _ReceiveFormState extends State<_ReceiveForm> {
       final received = double.tryParse(rText) ?? -1;
       final damaged = double.tryParse(dText) ?? -1;
 
-      if (received < 0 || damaged < 0) {
-        setState(() => _error = 'Invalid quantities for $matName. Quantities cannot be negative.');
+      if (!received.isFinite ||
+          !damaged.isFinite ||
+          received < 0 ||
+          damaged < 0) {
+        setState(
+          () => _error =
+              'Invalid quantities for $matName. Quantities cannot be negative.',
+        );
         return;
       }
       if (damaged > received) {
-        setState(() => _error = 'Damaged quantity cannot exceed received quantity for $matName.');
+        setState(
+          () => _error =
+              'Damaged quantity cannot exceed received quantity for $matName.',
+        );
         return;
       }
-      if (ordered > 0 && received > ordered) {
-        setState(() => _error = 'Received quantity ($received) exceeds ordered quantity ($ordered) for $matName.');
+      if (received > ordered) {
+        setState(
+          () => _error =
+              'Received quantity ($received) exceeds ordered quantity ($ordered) for $matName.',
+        );
         return;
       }
 
@@ -312,7 +392,9 @@ class _ReceiveFormState extends State<_ReceiveForm> {
     });
 
     try {
-      final evidenceList = _evidencePhoto != null ? [_evidencePhoto!.toPayload()] : const <Map<String, dynamic>>[];
+      final evidenceList = _evidencePhoto != null
+          ? [_evidencePhoto!.toPayload()]
+          : const <Map<String, dynamic>>[];
       await widget.service.recordDelivery(
         purchaseOrderId: (widget.order['id'] as num).toInt(),
         reference: ref,
@@ -321,12 +403,18 @@ class _ReceiveFormState extends State<_ReceiveForm> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Delivery recorded successfully with item lines and discrepancy check.')),
+          const SnackBar(
+            content: Text(
+              'Delivery recorded successfully with item lines and discrepancy check.',
+            ),
+          ),
         );
         await widget.onSaved();
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -334,7 +422,8 @@ class _ReceiveFormState extends State<_ReceiveForm> {
 
   @override
   Widget build(BuildContext context) {
-    final rawItems = (widget.order['items'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    final rawItems = (widget.order['items'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
     final supplier = widget.order['supplierName']?.toString() ?? 'Supplier';
 
     return Column(
@@ -343,12 +432,18 @@ class _ReceiveFormState extends State<_ReceiveForm> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('PO-${widget.order['id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(
+              'PO-${widget.order['id']}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
             StatusChip(label: supplier, tone: StatusTone.info),
           ],
         ),
         const SizedBox(height: 12),
-        AppTextField(label: 'Delivery Reference / Invoice', controller: _reference),
+        AppTextField(
+          label: 'Delivery Reference / Invoice',
+          controller: _reference,
+        ),
         const SizedBox(height: 16),
         Text('Order Line Items', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 4),
@@ -361,12 +456,18 @@ class _ReceiveFormState extends State<_ReceiveForm> {
           const Text('No line items found in this purchase order.')
         else
           ...rawItems.map((item) {
-            final id = (item['id'] as num?)?.toInt() ?? (item['materialId'] as num?)?.toInt() ?? 0;
-            final matName = item['materialName']?.toString() ?? 'Material #${item['materialId']}';
+            final id =
+                (item['id'] as num?)?.toInt() ??
+                (item['materialId'] as num?)?.toInt() ??
+                0;
+            final matName =
+                item['materialName']?.toString() ??
+                'Material #${item['materialId']}';
             final ordered = item['orderedQuantity']?.toString() ?? '0';
             // Prefer the unit captured with the line facts, so the "Ordered",
             // the input labels and the derived shortage all agree.
-            final unit = _lines[id]?.unit ?? item['unit']?.toString() ?? 'units';
+            final unit =
+                _lines[id]?.unit ?? item['unit']?.toString() ?? 'units';
             final rCtrl = _receivedControllers[id];
             final dCtrl = _damagedControllers[id];
 
@@ -387,12 +488,19 @@ class _ReceiveFormState extends State<_ReceiveForm> {
                       Expanded(
                         child: Text(
                           matName,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                       Text(
                         'Ordered: $ordered $unit',
-                        style: TextStyle(color: Colors.blueGrey.shade700, fontWeight: FontWeight.w600, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.blueGrey.shade700,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -405,7 +513,10 @@ class _ReceiveFormState extends State<_ReceiveForm> {
                             : AppTextField(
                                 label: 'Received ($unit)',
                                 controller: rCtrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 onChanged: (_) => _refreshLine(id),
                               ),
                       ),
@@ -416,7 +527,10 @@ class _ReceiveFormState extends State<_ReceiveForm> {
                             : AppTextField(
                                 label: 'Damaged ($unit)',
                                 controller: dCtrl,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 onChanged: (_) => _refreshLine(id),
                               ),
                       ),
@@ -471,7 +585,13 @@ class _ReceiveFormState extends State<_ReceiveForm> {
         ),
         if (_error != null) ...[
           const SizedBox(height: 12),
-          Text(_error!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+          Text(
+            _error!,
+            style: const TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
         const SizedBox(height: 18),
         AppButton(
@@ -483,6 +603,7 @@ class _ReceiveFormState extends State<_ReceiveForm> {
     );
   }
 }
+
 /// The immutable facts of one purchase-order line, as returned by
 /// `GET /api/deliveries/confirmed-orders`.
 ///

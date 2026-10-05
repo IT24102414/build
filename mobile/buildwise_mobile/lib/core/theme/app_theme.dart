@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
 
@@ -11,6 +12,10 @@ abstract final class AppTheme {
       secondary: AppColors.accent,
       error: AppColors.danger,
       surface: Colors.white,
+      onPrimary: Colors.white,
+      onSurface: AppColors.text,
+      outline: AppColors.border,
+      surfaceTint: Colors.transparent,
     );
 
     final border = OutlineInputBorder(
@@ -22,7 +27,7 @@ abstract final class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
-      fontFamily: 'Roboto',
+      fontFamily: 'Plus Jakarta Sans',
       textTheme: const TextTheme(
         headlineSmall: TextStyle(
           fontWeight: FontWeight.w700,
@@ -40,18 +45,76 @@ abstract final class AppTheme {
         bodyMedium: TextStyle(color: AppColors.text),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.primaryDark,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.text,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
         centerTitle: false,
         elevation: 0,
-        titleTextStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        titleTextStyle: TextStyle(
+          fontFamily: 'Plus Jakarta Sans',
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.text,
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: AppColors.primaryLight,
+        height: 70,
+        elevation: 0,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? AppColors.primary
+                : AppColors.textMuted,
+            size: 22,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.selected)
+                ? AppColors.primary
+                : AppColors.textMuted,
+            fontSize: 11,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w700
+                : FontWeight.w500,
+          ),
+        ),
+      ),
+      tabBarTheme: const TabBarThemeData(
+        labelColor: AppColors.primary,
+        unselectedLabelColor: AppColors.textMuted,
+        indicatorColor: AppColors.primary,
+        dividerColor: AppColors.border,
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 2,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
       ),
       cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(17.6),
           side: const BorderSide(color: AppColors.border),
         ),
       ),
@@ -63,23 +126,31 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(
+            fontFamily: 'Plus Jakarta Sans',
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.border),
+          side: const BorderSide(color: Color(0xFF98BBF6)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(
+            fontFamily: 'Plus Jakarta Sans',
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
+        labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 14,

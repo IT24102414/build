@@ -16,6 +16,7 @@ vi.mock('../services/qualityApi', () => ({
     transitionNonConformance: vi.fn(),
     listMaterialRequests: vi.fn(),
     listDeliveries: vi.fn(),
+    completeInspection: vi.fn(),
   },
 }))
 
@@ -112,6 +113,16 @@ const ncr = {
 }
 
 describe('QualityInspectionsPage', () => {
+  it('shows saved inspector comments and evidence photos in inspection history', async () => {
+    qualityApi.listInspections.mockResolvedValueOnce([{
+      ...inspections[0], notes: 'Packaging inspected at the unloading bay.',
+      evidence: [{ id: 1, fileName: 'site-photo.jpg', fileUrl: 'https://example.test/site-photo.jpg', contentType: 'image/jpeg' }],
+    }])
+    render(<QualityInspectionsPage />)
+    expect(await screen.findByText('Packaging inspected at the unloading bay.')).toBeInTheDocument()
+    expect(screen.getByAltText('site-photo.jpg')).toHaveAttribute('src', 'https://example.test/site-photo.jpg')
+    expect(screen.getByRole('link', { name: 'site-photo.jpg' })).toHaveAttribute('href', 'https://example.test/site-photo.jpg')
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     qualityApi.listNonConformances.mockResolvedValue([])
@@ -362,5 +373,39 @@ describe('NonConformancesPage', () => {
     // A Quality Inspector records inspections; they do not close NCRs.
     expect(screen.queryByRole('button', { name: 'Save transition' })).not.toBeInTheDocument()
     expect(screen.getByText('Awaiting Procurement Manager review')).toBeInTheDocument()
+  })
+})
+
+describe('Inspection form validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAuth.mockReturnValue({ hasRole: () => true, roles: ['QualityInspector'] })
+    qualityApi.listInspections.mockResolvedValue([])
+    qualityApi.listDeliveries.mockResolvedValue([{ id: 34, items: [{ materialId: 7, materialName: 'Rebar', receivedQuantity: 20 }] }])
+  })
+
+  async function openForm() {
+    const user = userEvent.setup()
+    render(<QualityInspectionsPage />)
+    await user.click((await screen.findAllByRole('button', { name: /Record Inspection/i }))[0])
+    await waitFor(() => expect(screen.getByLabelText('Inspected Quantity')).toHaveValue(20))
+    return user
+  }
+
+  it('requires Notes when a checklist item fails', async () => {
+    const user = await openForm()
+    await user.click(screen.getByRole('checkbox', { name: /Quantity verified/i }))
+    await user.click(screen.getByRole('button', { name: 'Submit Inspection' }))
+    expect(await screen.findByText(/Notes are required when any checklist item fails/)).toBeInTheDocument()
+    expect(qualityApi.completeInspection).not.toHaveBeenCalled()
+  })
+
+  it('rejects quantities exceeding the selected material received quantity', async () => {
+    const user = await openForm()
+    await user.clear(screen.getByLabelText('Inspected Quantity'))
+    await user.type(screen.getByLabelText('Inspected Quantity'), '21')
+    await user.click(screen.getByRole('button', { name: 'Submit Inspection' }))
+    expect(await screen.findByText(/Inspected quantity cannot exceed received quantity/)).toBeInTheDocument()
+    expect(qualityApi.completeInspection).not.toHaveBeenCalled()
   })
 })

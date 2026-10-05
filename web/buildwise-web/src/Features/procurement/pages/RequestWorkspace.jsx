@@ -10,7 +10,7 @@ import ProcurementApprovalPanel from '../components/ProcurementApprovalPanel'
 
 const TABS = ['Quotations', 'Comparison & AI Recommendation']
 
-export default function RequestWorkspace({ requestId, role, onBack, onViewPurchaseOrder }) {
+export default function RequestWorkspace({ requestId, role, canRecord = role === 'Officer', onBack, onViewPurchaseOrder }) {
   const [requestDetail, setRequestDetail] = useState(null)
   const [comparison, setComparison] = useState(null)
   const [workflow, setWorkflow] = useState(null)
@@ -30,6 +30,7 @@ export default function RequestWorkspace({ requestId, role, onBack, onViewPurcha
     ])
     setRequestDetail(detail)
     setComparison(compareData)
+    setWorkflow(await procurementApi.getLatestWorkflow(requestId))
     // The project materials budget is context for the deterministic budget
     // check shown in the pipeline. Optional: a missing/unreadable budget must
     // never block the workspace (the API also enforces who may read it).
@@ -53,7 +54,13 @@ export default function RequestWorkspace({ requestId, role, onBack, onViewPurcha
     }
   }
 
-  useEffect(() => { load() }, [requestId])
+  useEffect(() => {
+    load()
+    const refresh = () => { if (!document.hidden) loadCore().catch(() => {}) }
+    const timer = setInterval(refresh, 15000)
+    window.addEventListener('focus', refresh)
+    return () => { clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [requestId])
 
   const handleQuotationCreated = async () => {
     setNotice('Quotation recorded.')
@@ -142,8 +149,8 @@ export default function RequestWorkspace({ requestId, role, onBack, onViewPurcha
 
       {tab === TABS[0] && (
         <div className="stack">
-          <QuotationEntryForm requestDetail={requestDetail} onCreated={handleQuotationCreated} />
-          <QuotationComparisonView comparison={comparison} onDeleteQuotation={handleDeleteQuotation} onRunAnalysis={() => { setTab(TABS[1]); handleRunAnalysis() }} running={runningAnalysis} />
+          {canRecord && <QuotationEntryForm requestDetail={requestDetail} onCreated={handleQuotationCreated} />}
+          <QuotationComparisonView comparison={comparison} onDeleteQuotation={canRecord ? handleDeleteQuotation : undefined} onRunAnalysis={canRecord ? () => { setTab(TABS[1]); handleRunAnalysis() } : undefined} running={runningAnalysis} />
         </div>
       )}
 
@@ -152,7 +159,7 @@ export default function RequestWorkspace({ requestId, role, onBack, onViewPurcha
           <ProjectBudgetPanel projectId={requestDetail.projectId} />
           <Card>
             <div className="actions">
-              <Button onClick={handleRunAnalysis} disabled={runningAnalysis}>{runningAnalysis ? 'Running AI analysis…' : workflow ? 'Re-run AI Analysis' : 'Run AI Analysis'}</Button>
+              {canRecord && <Button onClick={handleRunAnalysis} disabled={runningAnalysis}>{runningAnalysis ? 'Running AI analysis…' : workflow ? 'Re-run AI Analysis' : 'Run AI Analysis'}</Button>}
               {deciding && <span className="muted">Recording decision…</span>}
             </div>
           </Card>

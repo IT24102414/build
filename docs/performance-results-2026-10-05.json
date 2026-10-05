@@ -1,0 +1,98 @@
+{
+  "measuredAtUtc": "2026-10-05T09:30:52.975Z",
+  "environment": "Local Windows development stack; not a production SLA",
+  "requestsPerScenario": 30,
+  "concurrencyPerScenario": 5,
+  "results": [
+    {
+      "name": "Shared ASP.NET Core API + PostgreSQL",
+      "total": 30,
+      "concurrency": 5,
+      "succeeded": 30,
+      "failed": 0,
+      "successRatePct": 100,
+      "throughputRps": 267.7,
+      "latencyMs": {
+        "average": 17.59,
+        "p50": 12.86,
+        "p95": 78.89,
+        "max": 79.83
+      },
+      "localAcceptanceP95Ms": 2000,
+      "passed": true,
+      "sampleErrors": []
+    },
+    {
+      "name": "Agent 8001 quotation analysis",
+      "total": 30,
+      "concurrency": 5,
+      "succeeded": 30,
+      "failed": 0,
+      "successRatePct": 100,
+      "throughputRps": 2.98,
+      "latencyMs": {
+        "average": 1625.93,
+        "p50": 817.64,
+        "p95": 6782.05,
+        "max": 8522.86
+      },
+      "localAcceptanceP95Ms": 1000,
+      "passed": false,
+      "sampleErrors": []
+    },
+    {
+      "name": "Agent 8002 request analysis",
+      "total": 30,
+      "concurrency": 5,
+      "succeeded": 30,
+      "failed": 0,
+      "successRatePct": 100,
+      "throughputRps": 223.05,
+      "latencyMs": {
+        "average": 21.93,
+        "p50": 8.07,
+        "p95": 94.49,
+        "max": 94.63
+      },
+      "localAcceptanceP95Ms": 1000,
+      "passed": true,
+      "sampleErrors": []
+    },
+    {
+      "name": "Agent 8003 discrepancy analysis",
+      "total": 30,
+      "concurrency": 5,
+      "succeeded": 30,
+      "failed": 0,
+      "successRatePct": 100,
+      "throughputRps": 256.81,
+      "latencyMs": {
+        "average": 19.12,
+        "p50": 6.9,
+        "p95": 82.03,
+        "max": 82.29
+      },
+      "localAcceptanceP95Ms": 1000,
+      "passed": true,
+      "sampleErrors": []
+    },
+    {
+      "name": "Agent 8004 quality-risk analysis",
+      "total": 30,
+      "concurrency": 5,
+      "succeeded": 30,
+      "failed": 0,
+      "successRatePct": 100,
+      "throughputRps": 291.31,
+      "latencyMs": {
+        "average": 16.75,
+        "p50": 9.11,
+        "p95": 58.02,
+        "max": 58.59
+      },
+      "localAcceptanceP95Ms": 1000,
+      "passed": true,
+      "sampleErrors": []
+    }
+  ]
+}

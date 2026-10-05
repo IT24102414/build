@@ -1,3 +1,5 @@
+> Deployment status update (2026-10-05): this document records the proposed hosting design, not evidence of a live deployment. No public deployment URLs were verified in the maintenance run. Historical provider free-tier/cost assumptions below must be checked by the team before choosing a current plan. The CI build now takes VITE_API_BASE_URL from a GitHub repository variable, rather than assuming an unverified hosted API URL.
+
 # ADR-005 — Deployment Architecture
 
 **Status:** Accepted · **Date:** 2026-09-23 · **Owner:** Group (all component owners)  

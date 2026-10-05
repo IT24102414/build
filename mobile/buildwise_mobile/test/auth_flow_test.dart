@@ -38,10 +38,7 @@ class FakeAuthService extends AuthService {
     if (mockApi.failNextLogin || password == 'wrong' || email.isEmpty) {
       throw Exception('Invalid email or password.');
     }
-    return {
-      'token': 'jwt-token-xyz',
-      'user': mockApi.nextLoginUser,
-    };
+    return {'token': 'jwt-token-xyz', 'user': mockApi.nextLoginUser};
   }
 
   @override
@@ -56,37 +53,47 @@ class FakeAuthService extends AuthService {
 /// complete inside the test's bounded pumps instead of awaiting a real socket.
 class StubOperationsService extends OperationsService {
   @override
-  Future<List<Map<String, dynamic>>> listNotifications({bool unreadOnly = false}) async =>
-      const [];
+  Future<List<Map<String, dynamic>>> listNotifications({
+    bool unreadOnly = false,
+  }) async => const [];
 }
 
 void main() {
-  group('Authentication Flow Tests', () {
-    testWidgets('LoginScreen renders fields, labels and role shortcuts', (tester) async {
-      final mockApi = MockApiClient();
-      final authService = FakeAuthService(mockApi);
-
+  testWidgets(
+    'login requires a valid email and password before authentication',
+    (tester) async {
+      var signedIn = false;
       await tester.pumpWidget(
         MaterialApp(
           home: LoginScreen(
-            onSignedIn: () {},
-            authService: authService,
+            onSignedIn: () => signedIn = true,
+            authService: FakeAuthService(
+              MockApiClient()..failNextLogin = false,
+            ),
           ),
         ),
       );
-
-      expect(find.text('BuildWise'), findsOneWidget);
-      expect(find.text('Sign in'), findsNWidgets(2)); // Card title and button label
-      expect(find.text('Email'), findsOneWidget);
-      expect(find.text('Password'), findsOneWidget);
-      expect(find.text('Quick demo login'), findsOneWidget);
-    });
-
-    // The mobile quick-login list must match the web app's exactly. All seven
-    // internal roles work on the phone now, so a three-account list would hide
-    // four roles from anyone evaluating the mobile build.
-    testWidgets('quick demo login offers all seven roles, matching the web app',
-        (tester) async {
+      await tester.tap(find.byType(AppButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a valid email address.'), findsOneWidget);
+      await tester.enterText(
+        find.byType(TextField).first,
+        'site.engineer@buildwise.demo',
+      );
+      await tester.tap(find.byType(AppButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Password is required.'), findsOneWidget);
+      expect(signedIn, isFalse);
+      expect(
+        find.text('Demo password for every seeded account: Passw0rd!'),
+        findsOneWidget,
+      );
+    },
+  );
+  group('Authentication Flow Tests', () {
+    testWidgets('LoginScreen renders fields, labels and role shortcuts', (
+      tester,
+    ) async {
       final mockApi = MockApiClient();
       final authService = FakeAuthService(mockApi);
 
@@ -96,28 +103,64 @@ void main() {
         ),
       );
 
-      const expected = [
-        'Procurement Officer — procurement.officer@buildwise.demo',
-        'Procurement Manager — procurement.manager@buildwise.demo',
-        'Site Engineer — site.engineer@buildwise.demo',
-        'Site Officer — site.officer@buildwise.demo',
-        'Site Manager — site.manager@buildwise.demo',
-        'Quality Inspector — quality.inspector@buildwise.demo',
-        'Administrator — admin@buildwise.demo',
-      ];
-      for (final account in expected) {
-        expect(find.text(account), findsOneWidget, reason: account);
-      }
-
-      // The web app's wording, so the two login screens read the same.
+      expect(find.text('BuildWise'), findsOneWidget);
       expect(
-        find.text('Seeded accounts for evaluation — one per role.'),
-        findsOneWidget,
-      );
+        find.text('Sign in'),
+        findsNWidgets(2),
+      ); // Card title and button label
+      expect(find.text('Email'), findsOneWidget);
+      expect(find.text('Password'), findsOneWidget);
+      expect(find.text('Quick demo login'), findsOneWidget);
     });
 
-    testWidgets('a demo quick-login fills in the seeded credentials',
-        (tester) async {
+    // The mobile quick-login list must match the web app's exactly. All seven
+    // internal roles work on the phone now, so a three-account list would hide
+    // four roles from anyone evaluating the mobile build.
+    testWidgets(
+      'quick demo login offers all seven roles, matching the web app',
+      (tester) async {
+        final mockApi = MockApiClient();
+        final authService = FakeAuthService(mockApi);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: LoginScreen(onSignedIn: () {}, authService: authService),
+          ),
+        );
+
+        const expected = [
+          'Procurement Officer — procurement.officer@buildwise.demo',
+          'Procurement Manager — procurement.manager@buildwise.demo',
+          'Site Engineer — site.engineer@buildwise.demo',
+          'Site Officer — site.officer@buildwise.demo',
+          'Site Manager — site.manager@buildwise.demo',
+          'Quality Inspector — quality.inspector@buildwise.demo',
+          'Administrator — admin@buildwise.demo',
+        ];
+        for (final account in expected) {
+          expect(
+            find.text(account.split('\u2014').first.trim()),
+            findsOneWidget,
+            reason: account,
+          );
+          expect(
+            find.text(account.split('\u2014').last.trim()),
+            findsOneWidget,
+            reason: account,
+          );
+        }
+
+        // The web app's wording, so the two login screens read the same.
+        expect(
+          find.text('Seeded accounts for evaluation — one per role.'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('a demo quick-login fills in the seeded credentials', (
+      tester,
+    ) async {
       final mockApi = MockApiClient()..failNextLogin = false;
       final authService = FakeAuthService(mockApi);
       final emails = <String>[];
@@ -138,9 +181,7 @@ void main() {
         ),
       );
 
-      await tester.tap(
-        find.text('Administrator — admin@buildwise.demo'),
-      );
+      await tester.tap(find.text('admin@buildwise.demo'));
       await tester.pumpAndSettle();
 
       // Tapping a demo account must actually authenticate, not just fill the
@@ -148,16 +189,15 @@ void main() {
       expect(emails, ['signed-in']);
     });
 
-    testWidgets('LoginScreen displays error on invalid credentials', (tester) async {
+    testWidgets('LoginScreen displays error on invalid credentials', (
+      tester,
+    ) async {
       final mockApi = MockApiClient()..failNextLogin = true;
       final authService = FakeAuthService(mockApi);
 
       await tester.pumpWidget(
         MaterialApp(
-          home: LoginScreen(
-            onSignedIn: () {},
-            authService: authService,
-          ),
+          home: LoginScreen(onSignedIn: () {}, authService: authService),
         ),
       );
 
@@ -203,34 +243,42 @@ void main() {
     // setState then throws "setState() callback argument returned a Future" and
     // sign-in is impossible on a real device. Testing LoginScreen alone could
     // never catch this because the bug lives in AuthGate, not LoginScreen.
-    testWidgets('AuthGate transitions to the app shell without throwing on sign in', (tester) async {
-      final mockApi = MockApiClient()..failNextLogin = false;
-      final authService = FakeAuthService(mockApi)..isSignedInResult = false;
+    testWidgets(
+      'AuthGate transitions to the app shell without throwing on sign in',
+      (tester) async {
+        final mockApi = MockApiClient()..failNextLogin = false;
+        final authService = FakeAuthService(mockApi)..isSignedInResult = false;
 
-      await tester.pumpWidget(
-        MaterialApp(home: AuthGate(authService: authService)),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          MaterialApp(home: AuthGate(authService: authService)),
+        );
+        await tester.pumpAndSettle();
 
-      // Starts signed out, on the login screen.
-      expect(find.text('Quick demo login'), findsOneWidget);
+        // Starts signed out, on the login screen.
+        expect(find.text('Quick demo login'), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField).at(0), 'site.engineer@buildwise.demo');
-      await tester.enterText(find.byType(TextField).at(1), 'Passw0rd!');
-      await tester.tap(find.byType(AppButton));
-      // Bounded pumps, not pumpAndSettle: the app shell shows a loading
-      // indicator while it fetches from the live API, which never settles here.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        await tester.enterText(
+          find.byType(TextField).at(0),
+          'site.engineer@buildwise.demo',
+        );
+        await tester.enterText(find.byType(TextField).at(1), 'Passw0rd!');
+        await tester.tap(find.byType(AppButton));
+        // Bounded pumps, not pumpAndSettle: the app shell shows a loading
+        // indicator while it fetches from the live API, which never settles here.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      // The old code surfaced the setState assertion here; reaching the shell
-      // proves the transition completed cleanly.
-      expect(tester.takeException(), isNull);
-      expect(find.text('Quick demo login'), findsNothing);
-      expect(find.byType(MainAppShell), findsOneWidget);
-    });
+        // The old code surfaced the setState assertion here; reaching the shell
+        // proves the transition completed cleanly.
+        expect(tester.takeException(), isNull);
+        expect(find.text('Quick demo login'), findsNothing);
+        expect(find.byType(MainAppShell), findsOneWidget);
+      },
+    );
 
-    testWidgets('AuthGate returns to the login screen on sign out', (tester) async {
+    testWidgets('AuthGate returns to the login screen on sign out', (
+      tester,
+    ) async {
       final mockApi = MockApiClient();
       final authService = FakeAuthService(mockApi)..isSignedInResult = true;
 

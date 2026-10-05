@@ -347,6 +347,10 @@ public class FullLifecycleScenarioTests : IAsyncLifetime
             MoistureCheck = false,
             PackagingCheck = false,
             DefectsCheck = false,
+            // The service requires notes whenever a checklist item fails, so
+            // the inspector's observation is recorded on the inspection itself.
+            Notes = "Outer bags split on arrival; moisture visible on 20 bags, "
+                + "so they are rejected and quarantined pending supplier claim.",
             Items = new List<InspectionItem>
             {
                 new()

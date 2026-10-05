@@ -25,12 +25,14 @@ class MaterialRequestReviewScreen extends StatefulWidget {
     required this.detail,
     this.service,
     this.onDecided,
+    this.canApprove = true,
   });
 
   /// The full request from `GET /material-requests/{id}`, including its items.
   final Map<String, dynamic> detail;
   final OperationsService? service;
   final VoidCallback? onDecided;
+  final bool canApprove;
 
   @override
   State<MaterialRequestReviewScreen> createState() =>
@@ -70,27 +72,34 @@ class _MaterialRequestReviewScreenState
       // Ignore a response for a different request rather than showing another
       // request's flags on this one.
       final analysed = result['requestId'];
+      if (!mounted) return;
       if (analysed != null && analysed != id) {
-        setState(() =>
-            _error = 'The analysis response did not match this request.');
+        setState(
+          () => _error = 'The analysis response did not match this request.',
+        );
         return;
       }
       if (mounted) setState(() => _analysis = result);
     } catch (e) {
-      if (mounted) setState(() => _error = FieldMessages.friendly(e.toString()));
+      if (mounted) {
+        setState(() => _error = FieldMessages.friendly(e.toString()));
+      }
     } finally {
       if (mounted) setState(() => _analyzing = false);
     }
   }
+
   /// Records the decision, enforcing the server's comment rule up front so the
   /// manager never meets an unexplained 400.
   Future<void> _decide(String decision) async {
     final id = (widget.detail['id'] as num).toInt();
     final comment = _comment.text.trim();
     if (decision != 'Approved' && comment.isEmpty) {
-      setState(() => _error = decision == 'Rejected'
-          ? 'A comment is required when rejecting a request.'
-          : 'Add a comment explaining what needs to be revised.');
+      setState(
+        () => _error = decision == 'Rejected'
+            ? 'A comment is required when rejecting a request.'
+            : 'Add a comment explaining what needs to be revised.',
+      );
       return;
     }
     setState(() {
@@ -107,7 +116,9 @@ class _MaterialRequestReviewScreenState
       setState(() => _outcome = decision);
       widget.onDecided?.call();
     } catch (e) {
-      if (mounted) setState(() => _error = FieldMessages.friendly(e.toString()));
+      if (mounted) {
+        setState(() => _error = FieldMessages.friendly(e.toString()));
+      }
     } finally {
       if (mounted) setState(() => _deciding = false);
     }
@@ -119,18 +130,18 @@ class _MaterialRequestReviewScreenState
   Widget _confirmation(int? id) {
     final copy = switch (_outcome!) {
       'Approved' => (
-          'Request #$id approved',
-          'Procurement can begin: RFQ, quotations, analysis, then a purchase '
-              'order.',
-        ),
+        'Request #$id approved',
+        'Procurement can begin: RFQ, quotations, analysis, then a purchase '
+            'order.',
+      ),
       'Rejected' => (
-          'Request #$id rejected',
-          'The site team can revise and resubmit it.',
-        ),
+        'Request #$id rejected',
+        'The site team can revise and resubmit it.',
+      ),
       _ => (
-          'Revision requested on #$id',
-          'The request was sent back to the site team with your comments.',
-        ),
+        'Revision requested on #$id',
+        'The request was sent back to the site team with your comments.',
+      ),
     };
     return Scaffold(
       appBar: AppBar(title: const Text('Decision recorded')),
@@ -165,50 +176,50 @@ class _MaterialRequestReviewScreenState
   }
 
   Widget _detailRow(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 108,
-              child: Text(label, style: Theme.of(context).textTheme.bodySmall),
-            ),
-            Expanded(child: Text(value)),
-          ],
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 108,
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
         ),
-      );
+        Expanded(child: Text(value)),
+      ],
+    ),
+  );
 
   Widget _itemCard(Map<String, dynamic> item) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: AppCard(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item['materialName']?.toString() ?? 'Material',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    if (item['description'] != null &&
-                        item['description'].toString().isNotEmpty)
-                      Text(
-                        item['description'].toString(),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                  ],
+    padding: const EdgeInsets.only(bottom: 8),
+    child: AppCard(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item['materialName']?.toString() ?? 'Material',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-              ),
-              Text(
-                '${item['requestedQuantity'] ?? 0} ${item['unit'] ?? ''}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ],
+                if (item['description'] != null &&
+                    item['description'].toString().isNotEmpty)
+                  Text(
+                    item['description'].toString(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ],
+            ),
           ),
-        ),
-      );
+          Text(
+            '${item['requestedQuantity'] ?? 0} ${item['unit'] ?? ''}',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _analysisCard(Map<String, dynamic> analysis) {
     final flags = (analysis['flags'] as List<dynamic>?) ?? const [];
@@ -234,6 +245,7 @@ class _MaterialRequestReviewScreenState
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final id = (widget.detail['id'] as num?)?.toInt();
@@ -267,61 +279,70 @@ class _MaterialRequestReviewScreenState
           else
             ..._items.map(_itemCard),
           const SizedBox(height: 20),
-          const SectionHeader(title: 'Request analysis'),
-          const SizedBox(height: 4),
-          Text(
-            'Advisory only — the agent flags planning risk but never approves or '
-            'changes the request.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 10),
-          AppButton(
-            label: _analyzing
-                ? 'Analyzing…'
-                : _analysis == null
-                    ? 'Analyze request'
-                    : 'Re-run analysis',
-            expand: true,
-            variant: AppButtonVariant.secondary,
-            onPressed: _analyzing ? null : _runAnalysis,
-          ),
-          if (_analysis != null) ...[
+          if (widget.canApprove) ...[
+            const SectionHeader(title: 'Request analysis'),
+            const SizedBox(height: 4),
+            Text(
+              'Advisory only — the agent flags planning risk but never approves or '
+              'changes the request.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: 10),
-            _analysisCard(_analysis!),
+            AppButton(
+              label: _analyzing
+                  ? 'Analyzing…'
+                  : _analysis == null
+                  ? 'Analyze request'
+                  : 'Re-run analysis',
+              expand: true,
+              variant: AppButtonVariant.secondary,
+              onPressed: _analyzing ? null : _runAnalysis,
+            ),
+            if (_analysis != null) ...[
+              const SizedBox(height: 10),
+              _analysisCard(_analysis!),
+            ],
+            const SizedBox(height: 20),
           ],
-          const SizedBox(height: 20),
-          const SectionHeader(title: 'Your decision'),
-          const SizedBox(height: 8),
-          AppTextField(
-            label: 'Comment',
-            controller: _comment,
-            maxLines: 3,
-            hint: 'Optional for Approve. Required for Reject or Revision.',
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!, style: const TextStyle(color: Colors.red)),
+          if (widget.canApprove &&
+              [
+                'PendingApproval',
+                'UnderReview',
+                'AwaitingProcurementApproval',
+              ].contains(widget.detail['status'])) ...[
+            const SectionHeader(title: 'Your decision'),
+            const SizedBox(height: 8),
+            AppTextField(
+              label: 'Comment',
+              controller: _comment,
+              maxLines: 3,
+              hint: 'Optional for Approve. Required for Reject or Revision.',
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: const TextStyle(color: Colors.red)),
+            ],
+            const SizedBox(height: 12),
+            AppButton(
+              label: 'Approve',
+              expand: true,
+              onPressed: _deciding ? null : () => _decide('Approved'),
+            ),
+            const SizedBox(height: 8),
+            AppButton(
+              label: 'Reject',
+              expand: true,
+              variant: AppButtonVariant.danger,
+              onPressed: _deciding ? null : () => _decide('Rejected'),
+            ),
+            const SizedBox(height: 8),
+            AppButton(
+              label: 'Request revision',
+              expand: true,
+              variant: AppButtonVariant.secondary,
+              onPressed: _deciding ? null : () => _decide('RevisionRequested'),
+            ),
           ],
-          const SizedBox(height: 12),
-          AppButton(
-            label: 'Approve',
-            expand: true,
-            onPressed: _deciding ? null : () => _decide('Approved'),
-          ),
-          const SizedBox(height: 8),
-          AppButton(
-            label: 'Reject',
-            expand: true,
-            variant: AppButtonVariant.danger,
-            onPressed: _deciding ? null : () => _decide('Rejected'),
-          ),
-          const SizedBox(height: 8),
-          AppButton(
-            label: 'Request revision',
-            expand: true,
-            variant: AppButtonVariant.secondary,
-            onPressed: _deciding ? null : () => _decide('RevisionRequested'),
-          ),
         ],
       ),
     );

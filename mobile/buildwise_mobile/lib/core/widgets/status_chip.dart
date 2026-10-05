@@ -16,10 +16,10 @@ class StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = switch (tone) {
-      StatusTone.success => (AppColors.success, const Color(0xFFDCFCE7)),
-      StatusTone.warning => (AppColors.warning, const Color(0xFFFEF3C7)),
-      StatusTone.danger => (AppColors.danger, const Color(0xFFFEE2E2)),
-      StatusTone.info => (const Color(0xFF1D4ED8), const Color(0xFFDBEAFE)),
+      StatusTone.success => (AppColors.success, const Color(0xFFC9F5DF)),
+      StatusTone.warning => (AppColors.warning, const Color(0xFFFFECC2)),
+      StatusTone.danger => (AppColors.danger, const Color(0xFFFFDEE2)),
+      StatusTone.info => (AppColors.primary, AppColors.primaryLight),
       StatusTone.neutral => (AppColors.textMuted, const Color(0xFFEEF2F6)),
     };
     return Chip(

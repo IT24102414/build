@@ -112,7 +112,7 @@ Add-Check 'Quality Inspector cannot read agent execution history' ($status -eq 4
 $status = Request-Status Get '/quality-inspections/non-conformances' $tokens.QualityInspector
 Add-Check 'Quality Inspector reads NCRs' ($status -eq 200) "HTTP $status"
 $status = Request-Status Get '/quality-inspections/non-conformances' $tokens.ProcurementOfficer
-Add-Check 'Procurement Officer cannot read NCRs' ($status -eq 403) "HTTP $status"
+Add-Check 'Procurement Officer reads NCRs (quality read policy)' ($status -eq 200) "HTTP $status"
 $status = Request-Status Put '/quality-inspections/non-conformances/999999/status' $tokens.QualityInspector @{ newStatus = 'Resolved' }
 Add-Check 'Quality Inspector cannot manage NCR status' ($status -eq 403) "HTTP $status"
 

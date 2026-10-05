@@ -447,6 +447,7 @@ public class QualityInspectionServiceTests
             scenario.Delivery.Id, scenario.Material.Id,
             inspected: 100m, accepted: 80m, rejected: 20m,
             reason: "Torn bags.");
+        inspection.Notes = "Packaging and visual damage observed.";
         inspection.VisualConditionCheck = false;
         inspection.PackagingCheck = false;
 
@@ -634,6 +635,7 @@ public class QualityInspectionServiceTests
         {
             DeliveryId = scenario.Delivery.Id,
             InspectorUserId = InspectorUserId,
+            Notes = "Water damage and packaging defects observed on both materials.",
             // Structured five-point checklist (Rule 0). Packaging and defects
             // failed, which is what these rejected quantities represent.
             QuantityCheck = true,
@@ -874,5 +876,86 @@ public class QualityInspectionServiceTests
             () => service.UpdateNonConformanceStatusAsync(ncr.Id, NonConformanceStatus.Resolved, resolution: "  "));
 
         Assert.Contains("resolution is required", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("delivery")]
+    [InlineData("empty")]
+    [InlineData("zero")]
+    [InlineData("notes")]
+    [InlineData("evidenceCount")]
+    [InlineData("evidenceSize")]
+    [InlineData("duplicateQuantity")]
+    public async Task Completion_Rejects_Invalid_Input_Without_Persisting(string rule)
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var inspection = BuildInspection(scenario.Delivery.Id, scenario.Material.Id, 200m, 200m, 0m);
+        switch (rule)
+        {
+            case "delivery": inspection.DeliveryId = 0; break;
+            case "empty": inspection.Items.Clear(); break;
+            case "zero": inspection.Items[0].InspectedQuantity = 0; inspection.Items[0].AcceptedQuantity = 0; break;
+            case "notes": inspection.QuantityCheck = false; inspection.Notes = "  "; break;
+            case "evidenceCount":
+                inspection.Evidence = Enumerable.Range(0, 11).Select(i => new InspectionEvidence
+                { FileName = $"{i}.jpg", FileUrl = "https://example.test/photo.jpg" }).ToList(); break;
+            case "evidenceSize":
+                inspection.Evidence.Add(new InspectionEvidence
+                { FileName = "large.jpg", FileUrl = "https://example.test/photo.jpg", FileSizeBytes = 10_000_001 }); break;
+            case "duplicateQuantity":
+                inspection.Items.Add(new InspectionItem { MaterialId = scenario.Material.Id, InspectedQuantity = 100m, AcceptedQuantity = 100m }); break;
+        }
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new QualityInspectionService(scenario.Db).CompleteInspectionAsync(inspection));
+        Assert.Empty(await scenario.Db.Inspections.ToListAsync());
+        Assert.Empty(await scenario.Db.NonConformances.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(NonConformanceStatus.Resolved, false)]
+    [InlineData(NonConformanceStatus.Closed, false)]
+    [InlineData(NonConformanceStatus.AcceptedException, false)]
+    [InlineData(NonConformanceStatus.Resolved, true)]
+    [InlineData(NonConformanceStatus.Closed, true)]
+    [InlineData(NonConformanceStatus.AcceptedException, true)]
+    public async Task Both_Ncr_Endpoints_Require_Resolution(NonConformanceStatus target, bool useStatusEndpoint)
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var service = new QualityInspectionService(scenario.Db);
+        await service.CompleteInspectionAsync(BuildInspection(scenario.Delivery.Id, scenario.Material.Id, 100m, 95m, 5m, "Damaged"));
+        var ncr = Assert.Single(await scenario.Db.NonConformances.ToListAsync());
+        if (target == NonConformanceStatus.Closed)
+            await service.UpdateNonConformanceStatusAsync(ncr.Id, NonConformanceStatus.Resolved, "Replaced");
+        var original = ncr.Status;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => useStatusEndpoint
+            ? service.UpdateNonConformanceStatusAsync(ncr.Id, target, "  ")
+            : service.TransitionNonConformanceAsync(ncr.Id, new NcrReviewRequest(target, null, null, "  "), InspectorUserId));
+        Assert.Contains("resolution", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original, ncr.Status);
+    }
+
+    [Theory]
+    [InlineData(10_000_000, true)]
+    [InlineData(10_000_001, false)]
+    public async Task Evidence_Enforces_Actual_Size_Even_When_Metadata_Is_Zero(int size, bool allowed)
+    {
+        var scenario = await SeedConfirmedDeliveryAsync();
+        var inspection = BuildInspection(scenario.Delivery.Id, scenario.Material.Id, 100m, 100m, 0m);
+        inspection.Evidence.Add(new InspectionEvidence
+        {
+            FileName = "photo.jpg", FileSizeBytes = 0,
+            FileUrl = "data:image/jpeg;base64," + Convert.ToBase64String(new byte[size])
+        });
+        var service = new QualityInspectionService(scenario.Db);
+        if (allowed)
+        {
+            var created = await service.CompleteInspectionAsync(inspection);
+            Assert.Equal(size, Assert.Single(created.Evidence).FileSizeBytes);
+            Assert.Empty(await scenario.Db.NonConformances.ToListAsync());
+        }
+        else
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => service.CompleteInspectionAsync(inspection));
+            Assert.Empty(await scenario.Db.Inspections.ToListAsync());
+        }
     }
 }

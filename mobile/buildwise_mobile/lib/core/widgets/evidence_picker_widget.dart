@@ -81,6 +81,9 @@ class _EvidencePickerWidgetState extends State<EvidencePickerWidget> {
       }
 
       final bytes = await file.readAsBytes();
+      if (bytes.length > 10000000) {
+        throw Exception('Evidence files must be 10 MB or less.');
+      }
       final mime = file.mimeType ?? 'image/jpeg';
       final base64String = base64Encode(bytes);
       final dataUrl = 'data:$mime;base64,$base64String';

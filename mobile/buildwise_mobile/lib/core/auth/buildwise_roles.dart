@@ -58,6 +58,15 @@ class BuildWiseRoles {
   /// Roles that raise, revise and track material requests on site.
   static const Set<String> siteOperations = {siteEngineer, siteOfficer};
 
+  /// Roles that may record a delivery against a confirmed purchase order.
+  ///
+  /// Narrower than [siteOperations] on purpose. The Site Officer physically
+  /// receives the goods and signs for them; the Site Engineer opens the same
+  /// delivery workspace to follow what happened to the material they requested,
+  /// read-only. Keeping the write with one role stops a request being marked
+  /// satisfied by the same person who raised it.
+  static const Set<String> deliveryReceivers = {siteOfficer};
+
   /// Roles allowed to see purchase order commercial terms. The API redacts
   /// these server-side; the shell mirrors the rule so a receiving or quality
   /// user is never shown a money column.
@@ -96,15 +105,22 @@ class BuildWiseRoles {
   /// All seven internal roles are mobile-capable. Each one sees only the tabs
   /// its own capabilities allow, driven by the sets above:
   ///
-  /// | Role              | Mobile tabs                                    |
-  /// |-------------------|------------------------------------------------|
-  /// | Site Engineer     | Home, Requests, Status, Inspections, Agents     |
-  /// | Site Officer      | Home, Deliveries, Status, Inspections, Agents  |
-  /// | Quality Inspector | Home, Inspections, Agents                       |
-  /// | Site Manager      | Home, Approvals, Agents                        |
-  /// | Procurement Officer | Home, RFQs, Quotations, Agents               |
-  /// | Procurement Manager | Home, Approvals, RFQs, Quotations, Orders, Agents |
-  /// | Administrator     | Home, Administration, Agents                    |
+  /// | Role              | Mobile tabs                                               |
+  /// |-------------------|-----------------------------------------------------------|
+  /// | Site Engineer     | Home, Requests, Inspections, Status, Agents                |
+  /// | Site Officer      | Home, Deliveries, Inspections, Status, Agents             |
+  /// | Quality Inspector | Home, Inspections, Agents                                  |
+  /// | Site Manager      | Home, Inspections, Approvals, Agents                      |
+  /// | Procurement Officer | Home, Inspections, Suppliers, RFQs, Quotations, Record, Orders, Agents |
+  /// | Procurement Manager | Home, Inspections, Approvals, Suppliers, RFQs, Quotations, Record, Orders, Agents |
+  /// | Administrator     | Home, Inspections, Suppliers, RFQs, Quotations, Record, Orders, Admin, Agents |
+  ///
+  /// **Quality Inspections and Non-Conformance Reports are readable by every
+  /// internal role**, exactly as the web sidebar exposes them. Completing an
+  /// inspection stays with the Quality Inspector / Administrator, and moving
+  /// an NCR to Resolved or Closed stays with the Procurement Manager / Site
+  /// Manager / Administrator, so the shell only draws those controls for roles
+  /// the API would accept.
   ///
   /// The field roles keep their purpose-built screens. The desk roles get the
   /// same screens the React app uses, pointed at the identical API endpoints, so
@@ -120,6 +136,26 @@ class BuildWiseRoles {
   /// because [isWebOnly] must stay false for a real internal role — the mobile
   /// app is not a second-rate client, it is the same system in a pocket.
   static const Set<String> governance = {administrator};
+
+  /// Backend capability groups used by both navigation and action controls.
+  static const Set<String> requestReaders = {
+    siteEngineer,
+    siteOfficer,
+    procurementOfficer,
+    procurementManager,
+    siteManager,
+    administrator,
+  };
+  static const Set<String> supplierEditors = {
+    procurementOfficer,
+    administrator,
+  };
+  static const Set<String> procurementWriters = {
+    procurementOfficer,
+    procurementManager,
+    administrator,
+  };
+  static const Set<String> qualityWriters = {qualityInspector, administrator};
 
   // --- Queries -------------------------------------------------------------
 
@@ -169,8 +205,7 @@ class BuildWiseRoles {
   /// that branch on it keep compiling, and so the one case that genuinely
   /// belongs on neither client — a non-internal claim such as a stray
   /// `Supplier` — is still expressible.
-  static Set<String> get webOnly =>
-      internalStaff.difference(mobileCapable);
+  static Set<String> get webOnly => internalStaff.difference(mobileCapable);
 
   /// Whether this account must be directed to the web app instead.
   static bool isWebOnly(Iterable<String> roles) =>

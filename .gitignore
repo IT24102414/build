@@ -66,6 +66,14 @@ __pycache__/
 # Agent worktrees are local scratch copies of the repo, not source. They contain
 # a full duplicate tree and must never be committed or pushed.
 .kilo/
+.venv/
+.pytest_cache/
+.coverage
+.playwright-mcp/
+artifacts/
+TestResults/
+submission_packages/
+submissions/
 
 # Stray process output from manually launched runtimes.
 api-out.txt

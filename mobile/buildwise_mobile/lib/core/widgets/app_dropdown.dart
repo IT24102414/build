@@ -22,6 +22,7 @@ class AppDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DropdownButtonFormField<String>(
+    isExpanded: true,
     initialValue: value,
     decoration: InputDecoration(labelText: label),
     items: [
@@ -32,6 +33,8 @@ class AppDropdown extends StatelessWidget {
             (itemLabels != null && i < itemLabels!.length)
                 ? itemLabels![i]
                 : items[i],
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
     ],

@@ -75,10 +75,15 @@ public static class Roles
     public const string SupplierAdministration = ProcurementOfficer + "," + Administrator;
 
     /// <summary>Roles allowed to read quality records. Delivery and site roles are
-    /// included because they consume inspection outcomes; pricing is never
-    /// exposed to any of them (see <c>PurchaseOrderProjection</c>).</summary>
-    public const string QualityReaders = SiteOperations + "," + ProcurementManagers
-        + "," + QualityInspector + "," + Administrator;
+    /// included because they consume inspection outcomes; the Procurement Officer
+    /// is included so the desk that raised the purchase order can track the
+    /// quality outcome of its deliveries (mirrors the web sidebar, which exposes
+    /// Quality Inspections and Non-Conformance Reports to every internal role).
+    /// Pricing is never exposed to any of them (see <c>PurchaseOrderProjection</c>),
+    /// and this set grants reads only — writes stay behind
+    /// <c>QualityControlOnly</c> / <c>ProcurementDecisionOnly</c>.</summary>
+    public const string QualityReaders = SiteOperations + "," + ProcurementStaff
+        + "," + ProcurementManagers + "," + QualityInspector + "," + Administrator;
 
     /// <summary>Roles permitted to act on the delivery / receiving surface.
     /// Procurement Officers are included so they can track PO fulfilment.</summary>
@@ -134,6 +139,18 @@ public static class Policies
     /// quality and procurement management.
     /// </summary>
     public const string DeliveryParticipantsOnly = "DeliveryParticipantsOnly";
+
+    /// <summary>
+    /// Roles permitted to <em>record</em> a delivery against a confirmed purchase
+    /// order. Deliberately narrower than <see cref="DeliveryParticipantsOnly"/>:
+    /// the Site Officer is the one physically taking the goods in and signing for
+    /// them, so they are the only site role that may write a receiving entry.
+    /// The Site Engineer opens the same workspace to follow the material they
+    /// requested, but read-only — raising demand and accepting stock are
+    /// different responsibilities and one person holding both would let a request
+    /// appear satisfied by their own keying.
+    /// </summary>
+    public const string DeliveryReceiversOnly = "DeliveryReceiversOnly";
 }
 
 /// <summary>

@@ -44,7 +44,7 @@ export default function PurchaseOrderList({ onOpenOrder }) {
       <div className="toolbar">
         <form className="toolbar__filters" onSubmit={(e) => { e.preventDefault(); load(1) }}>
           <SearchInput placeholder="Search by supplier or PO number…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <SelectInput label="Status" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: 'all', label: 'All statuses' }, { value: 'Created', label: 'Created' }, { value: 'Confirmed', label: 'Confirmed' }, { value: 'InProgress', label: 'In progress' }, { value: 'Completed', label: 'Completed' }, { value: 'Cancelled', label: 'Cancelled' }]} />
+          <SelectInput label="Status" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: 'all', label: 'All statuses' }, { value: 'Created', label: 'Created' }, { value: 'Confirmed', label: 'Confirmed' }, { value: 'InProgress', label: 'In progress' }, { value: 'Cancelled', label: 'Cancelled' }]} />
         </form>
       </div>
       <Card>

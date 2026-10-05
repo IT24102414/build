@@ -24,7 +24,7 @@ class MockDeliveryOperationsService extends OperationsService {
           'unit': 'cube',
         },
       ],
-    }
+    },
   ];
 
   List<Map<String, dynamic>> mockDeliveries = [
@@ -34,13 +34,9 @@ class MockDeliveryOperationsService extends OperationsService {
       'deliveryReference': 'INV-9081',
       'status': 'Received',
       'items': [
-        {
-          'materialId': 1,
-          'receivedQuantity': 450,
-          'damagedQuantity': 0,
-        }
+        {'materialId': 1, 'receivedQuantity': 450, 'damagedQuantity': 0},
       ],
-    }
+    },
   ];
 
   bool recordCalled = false;
@@ -72,7 +68,9 @@ class MockDeliveryOperationsService extends OperationsService {
 
 void main() {
   group('DeliveryReceivingScreen Multi-Item & Evidence Tests', () {
-    testWidgets('Renders confirmed PO dropdown and recorded deliveries', (tester) async {
+    testWidgets('Renders confirmed PO dropdown and recorded deliveries', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -81,7 +79,10 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: DeliveryReceivingScreen(service: mockService),
+          home: DeliveryReceivingScreen(
+            autoRefresh: false,
+            service: mockService,
+          ),
         ),
       );
 
@@ -94,73 +95,85 @@ void main() {
       expect(find.text('Run AI Analysis'), findsOneWidget);
     });
 
-    testWidgets('Selecting PO renders all line items with ordered quantity and evidence picker', (tester) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'Selecting PO renders all line items with ordered quantity and evidence picker',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      final mockService = MockDeliveryOperationsService();
+        final mockService = MockDeliveryOperationsService();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: DeliveryReceivingScreen(service: mockService),
-        ),
-      );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: DeliveryReceivingScreen(
+              autoRefresh: false,
+              service: mockService,
+            ),
+          ),
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byType(DropdownButtonFormField<String>));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('44').last);
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('44').last);
+        await tester.pumpAndSettle();
 
-      expect(find.text('PO-44'), findsOneWidget);
-      expect(find.text('Supplier A'), findsOneWidget);
-      expect(find.text('Cement (50kg bag)'), findsOneWidget);
-      expect(find.text('Ordered: 450 bag'), findsOneWidget);
-      expect(find.text('River Sand'), findsOneWidget);
-      expect(find.text('Ordered: 100 cube'), findsOneWidget);
+        expect(find.text('PO-44'), findsOneWidget);
+        expect(find.text('Supplier A'), findsOneWidget);
+        expect(find.text('Cement (50kg bag)'), findsOneWidget);
+        expect(find.text('Ordered: 450 bag'), findsOneWidget);
+        expect(find.text('River Sand'), findsOneWidget);
+        expect(find.text('Ordered: 100 cube'), findsOneWidget);
 
-      expect(find.text('Delivery Photo Evidence'), findsOneWidget);
-      expect(find.text('📷 Take Photo'), findsOneWidget);
-      expect(find.text('📁 Gallery'), findsOneWidget);
-      expect(find.text('Submit Receiving'), findsOneWidget);
-    });
+        expect(find.text('Delivery Photo Evidence'), findsOneWidget);
+        expect(find.text('📷 Take Photo'), findsOneWidget);
+        expect(find.text('📁 Gallery'), findsOneWidget);
+        expect(find.text('Submit Receiving'), findsOneWidget);
+      },
+    );
 
-    testWidgets('Submitting multi-line receiving packages all item quantities', (tester) async {
-      tester.view.physicalSize = const Size(1080, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'Submitting multi-line receiving packages all item quantities',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      final mockService = MockDeliveryOperationsService();
+        final mockService = MockDeliveryOperationsService();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: DeliveryReceivingScreen(service: mockService),
-        ),
-      );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: DeliveryReceivingScreen(
+              autoRefresh: false,
+              service: mockService,
+            ),
+          ),
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byType(DropdownButtonFormField<String>));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('44').last);
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('44').last);
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Submit Receiving'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Submit Receiving'));
+        await tester.pumpAndSettle();
 
-      expect(mockService.recordCalled, isTrue);
-      expect(mockService.lastPayload?['purchaseOrderId'], equals(44));
-      expect(mockService.lastPayload?['items'], isA<List>());
-      final items = mockService.lastPayload?['items'] as List;
-      expect(items.length, equals(2));
-      expect(items[0]['materialId'], equals(1));
-      expect(items[0]['receivedQuantity'], equals(450.0));
-      expect(items[1]['materialId'], equals(2));
-      expect(items[1]['receivedQuantity'], equals(100.0));
-    });
+        expect(mockService.recordCalled, isTrue);
+        expect(mockService.lastPayload?['purchaseOrderId'], equals(44));
+        expect(mockService.lastPayload?['items'], isA<List>());
+        final items = mockService.lastPayload?['items'] as List;
+        expect(items.length, equals(2));
+        expect(items[0]['materialId'], equals(1));
+        expect(items[0]['receivedQuantity'], equals(450.0));
+        expect(items[1]['materialId'], equals(2));
+        expect(items[1]['receivedQuantity'], equals(100.0));
+      },
+    );
   });
 }

@@ -26,12 +26,13 @@ export default function ProcurementApp({
   onNavigate,
 }) {
   const { hasRole } = useAuth()
-  const role = hasRole('ProcurementManager') ? 'Manager' : hasRole('ProcurementOfficer') ? 'Officer' : 'ReadOnly'
+  const role = hasRole('ProcurementManager') || hasRole('Administrator') ? 'Manager' : hasRole('ProcurementOfficer') ? 'Officer' : 'ReadOnly'
   const [mockMode, setMockMode] = useState(false)
 
   useEffect(() => {
+    if (role === 'ReadOnly') return
     procurementApi.listSuppliers().catch(() => {}).finally(() => setMockMode(isUsingMockData()))
-  }, [])
+  }, [role])
 
   let content
   if (section === 'Suppliers') {
@@ -40,7 +41,7 @@ export default function ProcurementApp({
       : <SupplierList onOpenSupplier={(id) => onNavigate({ supplierId: id })} />
   } else if (section === 'Approved Requests') {
     content = requestId
-      ? <RequestWorkspace requestId={requestId} role={role} onBack={() => onNavigate({ requestId: null })} onViewPurchaseOrder={(id) => onNavigate({ section: 'Purchase Orders', orderId: id })} />
+      ? <RequestWorkspace requestId={requestId} role={role} canRecord={hasRole('ProcurementOfficer') || hasRole('Administrator')} onBack={() => onNavigate({ requestId: null })} onViewPurchaseOrder={(id) => onNavigate({ section: 'Purchase Orders', orderId: id })} />
       : <ApprovedRequestsQueue onOpenRequest={(id) => onNavigate({ section: 'Approved Requests', requestId: id })} />
   } else if (section === 'Purchase Orders') {
     content = orderId

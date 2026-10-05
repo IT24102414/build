@@ -19,29 +19,30 @@ class MockOperationsService extends OperationsService {
       'itemCount': 1,
       'materialNames': ['Concrete Blocks'],
       'status': 'PendingApproval',
-    }
+    },
   ];
 
   @override
   Future<List<Map<String, dynamic>>> listMyRequests() async => mockRequests;
 
   @override
-  Future<List<Map<String, dynamic>>> listRequests({String? status}) async => mockRequests;
+  Future<List<Map<String, dynamic>>> listRequests({String? status}) async =>
+      mockRequests;
 
   /// The create-request form now resolves the project and material from the
   /// API instead of submitting hard-coded ids, so the mock serves the same
   /// reference data the real `/projects` and `/materials` endpoints return.
   @override
   Future<List<Map<String, dynamic>>> listProjects() async => [
-        {'id': 1, 'name': 'Riverside Apartments — Block C'},
-        {'id': 2, 'name': 'Kandy Heights — Tower A'},
-      ];
+    {'id': 1, 'name': 'Riverside Apartments — Block C'},
+    {'id': 2, 'name': 'Kandy Heights — Tower A'},
+  ];
 
   @override
   Future<List<Map<String, dynamic>>> listMaterials() async => [
-        {'id': 1, 'name': 'Cement (50kg bag)', 'unit': 'bags'},
-        {'id': 2, 'name': 'Concrete Blocks', 'unit': 'units'},
-      ];
+    {'id': 1, 'name': 'Cement (50kg bag)', 'unit': 'bags'},
+    {'id': 2, 'name': 'Concrete Blocks', 'unit': 'units'},
+  ];
 
   /// Captures the last submitted request so a test can assert on what the form
   /// actually sent, rather than only on what the screen displayed.
@@ -59,14 +60,22 @@ class MockOperationsService extends OperationsService {
     String? description,
     String? unit,
     String? itemRequiredDate,
+    String? requestDate,
+    String? projectName,
+    String? materialName,
   }) async {
     lastSubmitted = {
       'projectId': projectId,
+      'projectName': projectName,
+      'materialName': materialName,
       'requiredDate': requiredDate,
       'materialId': materialId,
       'quantity': quantity,
       'reason': reason,
       'unit': unit,
+      'requestDate': requestDate,
+      'siteNotes': siteNotes,
+      'description': description,
     };
     final newReq = {
       'id': 76,
@@ -81,12 +90,21 @@ class MockOperationsService extends OperationsService {
 
 void main() {
   group('MaterialRequestsScreen Widget Tests', () {
-    testWidgets('Renders material requests list with status chips', (tester) async {
+    testWidgets('Renders material requests list with status chips', (
+      tester,
+    ) async {
       final mockService = MockOperationsService();
 
       await tester.pumpWidget(
         MaterialApp(
-          home: MaterialRequestsScreen(service: mockService),
+          // canApprove is off by default because the agent/approval actions sit
+          // behind the API's approval policies; this test asserts the row
+          // actions, so it opts into that capability.
+          home: MaterialRequestsScreen(
+            service: mockService,
+            canApprove: true,
+            autoRefresh: false,
+          ),
         ),
       );
 
@@ -105,23 +123,43 @@ void main() {
     });
 
     /// Opens the create sheet and resolves the reference-data dropdowns.
-    Future<void> openCreateSheet(WidgetTester tester, MockOperationsService s) async {
-      await tester.pumpWidget(MaterialApp(home: MaterialRequestsScreen(service: s)));
+    Future<void> openCreateSheet(
+      WidgetTester tester,
+      MockOperationsService s,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MaterialRequestsScreen(service: s, autoRefresh: false),
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Create Request'));
       await tester.pumpAndSettle();
     }
 
     /// Picks an option from one of the create sheet's reference-data dropdowns.
+    Future<void> pickTyped(
+      WidgetTester tester,
+      Key field,
+      String fragment,
+    ) async {
+      await tester.enterText(find.byKey(field), fragment);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(fragment).last);
+      await tester.pumpAndSettle();
+    }
+
     Future<void> pickDropdown(
       WidgetTester tester,
       String label,
       String option,
     ) async {
-      await tester.tap(find.widgetWithText(DropdownButtonFormField<int>, label));
+      final field = Key(
+        label == 'Project *' ? 'project-field' : 'material-field',
+      );
+      await tester.ensureVisible(find.byKey(field));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(option).last);
-      await tester.pumpAndSettle();
+      await pickTyped(tester, field, option);
     }
 
     /// Scrolls the sheet until [finder] is visible, then taps it. The submit
@@ -139,41 +177,179 @@ void main() {
       final button = find.widgetWithText(FilledButton, 'Submit Request');
       await tester.ensureVisible(button.first);
       await tester.pumpAndSettle();
+      await tester.ensureVisible(button.first);
+      await tester.pumpAndSettle();
       await tester.tap(button.first);
       await tester.pumpAndSettle();
     }
 
-    testWidgets('Create sheet offers real project and material dropdowns',
-        (tester) async {
+    testWidgets('Create sheet resolves project and material from typed text', (
+      tester,
+    ) async {
       final mockService = MockOperationsService();
       await openCreateSheet(tester, mockService);
 
       expect(find.text('Create Material Request'), findsOneWidget);
-      expect(
-          find.widgetWithText(DropdownButtonFormField<int>, 'Project *'), findsOneWidget);
-      expect(
-          find.widgetWithText(DropdownButtonFormField<int>, 'Material *'), findsOneWidget);
+      expect(find.byKey(const Key('project-field')), findsOneWidget);
+      expect(find.byKey(const Key('material-field')), findsOneWidget);
       expect(find.text('Quantity *'), findsOneWidget);
       expect(find.text('Justification *'), findsOneWidget);
       expect(find.text('Submit Request'), findsOneWidget);
     });
 
-    testWidgets('Submitting with no project or material selected is refused',
-        (tester) async {
+    testWidgets('typing filters the suggestions to the text entered', (
+      tester,
+    ) async {
       final mockService = MockOperationsService();
       await openCreateSheet(tester, mockService);
 
-      await tester.enterText(find.widgetWithText(TextField, 'Quantity *'), '500');
+      await tester.enterText(find.byKey(const Key('project-field')), 'kandy');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kandy Heights — Tower A'), findsOneWidget);
+      // The other project does not match the typed text, so it is not offered.
+      expect(find.text('Riverside Apartments — Block C'), findsNothing);
+    });
+
+    testWidgets('a project name that is not in the list is submitted as text', (
+      tester,
+    ) async {
+      final mockService = MockOperationsService();
+      await openCreateSheet(tester, mockService);
+
+      // Fill the reference fields the way the other tests do, then replace the
+      // project with a site BuildWise has never seen.
+      await pickDropdown(tester, 'Project *', 'Kandy Heights — Tower A');
+      await pickDropdown(tester, 'Material *', 'Concrete Blocks');
       await tester.enterText(
-          find.widgetWithText(TextField, 'Justification *'), 'For masonry work');
+        find.widgetWithText(TextField, 'Quantity *'),
+        '500',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Justification *'),
+        'For masonry work',
+      );
+
+      // A new site is typed in as plain text. The form does not refuse it: the
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Site Notes'),
+        'Unload at the site entrance',
+      );
+
+      // A new site is typed in as plain text. The form does not refuse it: the
+      // name goes out and the API resolves or creates the project.
+      await tester.enterText(
+        find.byKey(const Key('project-field')),
+        'Galle Face Promenade',
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('new project name'), findsOneWidget);
+
       await submitRequest(tester);
 
-      // Nothing was sent, because the request is incomplete.
-      expect(mockService.lastSubmitted, isNull);
-      expect(find.text('Select a project.'), findsOneWidget);
+      expect(
+        mockService.lastSubmitted,
+        isNotNull,
+        reason:
+            'text on screen: '
+            '${find.byType(Text).evaluate().map((e) => (e.widget as Text).data).whereType<String>().toList()}',
+      );
+      expect(mockService.lastSubmitted!['projectName'], 'Galle Face Promenade');
+      // No matching project means no id is invented for the form to send.
+      expect(mockService.lastSubmitted!['projectId'], 0);
     });
-    testWidgets('A zero quantity is refused before any request is sent',
-        (tester) async {
+
+    testWidgets('text matching no record says so instead of offering one', (
+      tester,
+    ) async {
+      final mockService = MockOperationsService();
+      await openCreateSheet(tester, mockService);
+
+      await tester.enterText(
+        find.byKey(const Key('material-field')),
+        'unobtainium',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('No match'), findsOneWidget);
+    });
+
+    testWidgets('Submitting with no project or material selected is refused', (
+      tester,
+    ) async {
+      final mockService = MockOperationsService();
+      await openCreateSheet(tester, mockService);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Quantity *'),
+        '500',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Justification *'),
+        'For masonry work',
+      );
+      await submitRequest(tester);
+
+      // Nothing was sent, because the request is incomplete. The project is typed in
+      // as text, so the question is whether anything was typed at all.
+      expect(mockService.lastSubmitted, isNull);
+      expect(find.text('Enter a project name.'), findsOneWidget);
+    });
+    testWidgets(
+      'Typed alphanumeric material resolves and edited text clears its selection',
+      (tester) async {
+        final service = MockOperationsService();
+        await openCreateSheet(tester, service);
+        await pickDropdown(tester, 'Project *', 'Kandy Heights — Tower A');
+        await tester.enterText(
+          find.byKey(const Key('material-field')),
+          'cement (50kg bag)',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Quantity *'),
+          '10',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Justification *'),
+          'Concrete work',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Site Notes'),
+          'Store inside',
+        );
+        await submitRequest(tester);
+        expect(service.lastSubmitted?['materialId'], 1);
+
+        service.lastSubmitted = null;
+        await tester.tap(find.text('Create Request'));
+        await tester.pumpAndSettle();
+        await pickDropdown(tester, 'Project *', 'Kandy Heights — Tower A');
+        await pickDropdown(tester, 'Material *', 'Cement (50kg bag)');
+        await tester.enterText(
+          find.byKey(const Key('material-field')),
+          'Steel 12mm unknown',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Quantity *'),
+          '10',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Justification *'),
+          'Concrete work',
+        );
+        await tester.enterText(
+          find.widgetWithText(TextField, 'Site Notes'),
+          'Store inside',
+        );
+        await submitRequest(tester);
+        expect(service.lastSubmitted?['materialId'], 0);
+        expect(service.lastSubmitted?['materialName'], 'Steel 12mm unknown');
+      },
+    );
+
+    testWidgets('A zero quantity is refused before any request is sent', (
+      tester,
+    ) async {
       final mockService = MockOperationsService();
       await openCreateSheet(tester, mockService);
 
@@ -182,11 +358,16 @@ void main() {
 
       await tester.enterText(find.widgetWithText(TextField, 'Quantity *'), '0');
       await tester.enterText(
-          find.widgetWithText(TextField, 'Justification *'), 'For masonry work');
+        find.widgetWithText(TextField, 'Justification *'),
+        'For masonry work',
+      );
       await submitRequest(tester);
 
       expect(mockService.lastSubmitted, isNull);
-      expect(find.text('Quantity must be greater than zero.'), findsOneWidget);
+      expect(
+        find.text('Quantity must be a positive number greater than 0.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('A missing justification is refused', (tester) async {
@@ -196,15 +377,49 @@ void main() {
       await pickDropdown(tester, 'Project *', 'Riverside Apartments — Block C');
       await pickDropdown(tester, 'Material *', 'Cement (50kg bag)');
 
-      await tester.enterText(find.widgetWithText(TextField, 'Quantity *'), '500');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Quantity *'),
+        '500',
+      );
       await submitRequest(tester);
 
       expect(mockService.lastSubmitted, isNull);
-      expect(find.text('Enter a justification for this request.'), findsOneWidget);
+      expect(
+        find.text('Enter a justification for this request.'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('A complete request submits the chosen project and material',
-        (tester) async {
+    testWidgets('Countable quantities and site notes match web validation', (
+      tester,
+    ) async {
+      final service = MockOperationsService();
+      await openCreateSheet(tester, service);
+      await pickDropdown(tester, 'Project *', 'Kandy Heights — Tower A');
+      await pickDropdown(tester, 'Material *', 'Concrete Blocks');
+      final quantity = find.widgetWithText(TextField, 'Quantity *');
+      await tester.enterText(quantity, '10.5');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Justification *'),
+        'Masonry',
+      );
+      await submitRequest(tester);
+      expect(service.lastSubmitted, isNull);
+      expect(
+        find.textContaining('Decimal quantities are not allowed'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(quantity);
+      await tester.pumpAndSettle();
+      await tester.enterText(quantity, '10');
+      await submitRequest(tester);
+      expect(service.lastSubmitted, isNull);
+      expect(find.text('Enter site notes for this request.'), findsOneWidget);
+    });
+
+    testWidgets('A complete request submits the chosen project and material', (
+      tester,
+    ) async {
       final mockService = MockOperationsService();
       await openCreateSheet(tester, mockService);
 
@@ -213,9 +428,22 @@ void main() {
       await pickDropdown(tester, 'Project *', 'Kandy Heights — Tower A');
       await pickDropdown(tester, 'Material *', 'Concrete Blocks');
 
-      await tester.enterText(find.widgetWithText(TextField, 'Quantity *'), '500');
       await tester.enterText(
-          find.widgetWithText(TextField, 'Justification *'), 'Required for masonry');
+        find.widgetWithText(TextField, 'Quantity *'),
+        '500',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Justification *'),
+        'Required for masonry',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Site Notes'),
+        'Unload at the north gate',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Material Specification / Description'),
+        'Class A blocks',
+      );
       await submitRequest(tester);
 
       expect(mockService.lastSubmitted, isNotNull);
@@ -223,6 +451,12 @@ void main() {
       expect(mockService.lastSubmitted!['materialId'], 2);
       expect(mockService.lastSubmitted!['quantity'], 500.0);
       expect(mockService.lastSubmitted!['unit'], 'units');
+      expect(
+        mockService.lastSubmitted!['siteNotes'],
+        'Unload at the north gate',
+      );
+      expect(mockService.lastSubmitted!['description'], 'Class A blocks');
+      expect(mockService.lastSubmitted!['requestDate'], isNotNull);
     });
   });
 }

@@ -1,3 +1,5 @@
+> Current revision note (2026-10-05): the declaration below is historical and has not been re-signed or verified for this maintenance revision. AI-assisted documentation/code updates are disclosed in [the maintenance log](2026-10-05-codex-maintenance-log.md). Its claims about unaided documentation and member review must be corrected/confirmed by the students before submission. No signatures or individual reflections are provided by this update.
+
 # BuildWise — Group AI Usage Declaration
 
 **SE3090 Software Engineering Frameworks · Group Assignment 1**  

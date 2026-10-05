@@ -30,6 +30,7 @@ public class ProcurementWorkflowController : ControllerBase
     /// Starts the Quotation & Supplier Analysis Agent workflow for an approved material request (§4 / §7).
     /// </summary>
     [HttpPost("material-requests/{requestId:int}/procurement-workflow")]
+    [Authorize(Policy = Policies.SupplierAdministrationOnly)]
     public async Task<ActionResult<StartProcurementWorkflowResponse>> StartWorkflow(
         int requestId,
         [FromBody] StartProcurementWorkflowRequest? request)
@@ -69,6 +70,13 @@ public class ProcurementWorkflowController : ControllerBase
             return NotFound($"Workflow #{workflowId} not found.");
 
         return Ok(details);
+    }
+
+    [HttpGet("material-requests/{requestId:int}/procurement-workflow")]
+    public async Task<IActionResult> GetLatestWorkflow(int requestId)
+    {
+        var details = await _workflowService.GetLatestWorkflowForRequestAsync(requestId);
+        return details is null ? NoContent() : Ok(details);
     }
 
     /// <summary>

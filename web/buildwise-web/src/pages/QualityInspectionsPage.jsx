@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader, SelectInput, StatusBadge, TextInput } from '../components/shared'
+import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader, SelectInput, StatusBadge, SuccessDialog, TextInput } from '../components/shared'
 import { qualityApi } from '../services/qualityApi'
 import QualityRiskPanel from '../Features/quality/components/QualityRiskPanel'
 import QualityChecklist from '../Features/quality/components/QualityChecklist'
@@ -25,6 +25,8 @@ const INITIAL_INSPECTION_FORM = {
   notes: '',
   evidenceFileName: '',
   evidenceFileUrl: '',
+  evidenceFileSizeBytes: 0,
+  evidenceContentType: 'image/jpeg',
 }
 
 /**
@@ -61,6 +63,10 @@ export default function QualityInspectionsPage() {
 
   function handleImageFile(file) {
     if (!file) return
+    if (file.size > 10_000_000) {
+      setRecordError('Evidence files must be 10 MB or less.')
+      return
+    }
     const reader = new FileReader()
     reader.onload = (e) => {
       const dataUrl = e.target.result
@@ -69,6 +75,8 @@ export default function QualityInspectionsPage() {
         ...p,
         evidenceFileName: file.name || `photo-${Date.now()}.jpg`,
         evidenceFileUrl: dataUrl,
+        evidenceFileSizeBytes: file.size,
+        evidenceContentType: file.type || 'image/jpeg',
       }))
     }
     reader.readAsDataURL(file)
@@ -122,7 +130,8 @@ export default function QualityInspectionsPage() {
       const normalized = Array.isArray(delList) ? delList : (delList.deliveries ?? [])
       setDeliveries(normalized)
       if (normalized.length > 0 && !form.deliveryId) {
-        setForm((prev) => ({ ...prev, deliveryId: String(normalized[0].id) }))
+        const item = normalized[0].items?.[0]
+        setForm((prev) => ({ ...prev, deliveryId: String(normalized[0].id), materialId: item?.materialId ?? '', materialName: item?.material?.name ?? item?.materialName ?? '', inspectedQuantity: item?.receivedQuantity ?? 0 }))
       }
     } catch {
       setDeliveries([])
@@ -139,16 +148,31 @@ export default function QualityInspectionsPage() {
       setRecordError('Please select a received delivery to inspect.')
       return
     }
-    if (inspected <= 0) {
+    if (!Number.isFinite(inspected) || inspected <= 0) {
       setRecordError('Inspected quantity must be greater than zero.')
       return
     }
-    if (rejected < 0 || rejected > inspected) {
+    if (!Number.isFinite(rejected) || rejected < 0 || rejected > inspected) {
       setRecordError('Rejected quantity cannot be negative or exceed inspected quantity.')
       return
     }
     if (rejected > 0 && !form.rejectionReason.trim()) {
       setRecordError('A rejection reason is required when rejecting material.')
+      return
+    }
+
+    if (['quantityCheck', 'visualConditionCheck', 'moistureCheck', 'packagingCheck', 'defectsCheck'].some(key => !form[key]) && !form.notes.trim()) {
+      setRecordError('Notes are required when any checklist item fails.')
+      return
+    }
+    const delivery = deliveries.find(d => String(d.id) === String(form.deliveryId))
+    const lines = (delivery?.items ?? []).filter(item => Number(item.materialId) === Number(form.materialId))
+    if (!lines.length) {
+      setRecordError('Material must belong to the selected delivery.')
+      return
+    }
+    if (inspected > lines.reduce((sum, item) => sum + Number(item.receivedQuantity || 0), 0)) {
+      setRecordError('Inspected quantity cannot exceed received quantity.')
       return
     }
 
@@ -166,19 +190,19 @@ export default function QualityInspectionsPage() {
         defectsCheck: Boolean(form.defectsCheck),
         items: [
           {
-            materialId: Number(form.materialId) || 1,
+            materialId: Number(form.materialId),
             inspectedQuantity: inspected,
-            acceptedQuantity: inspected - rejected,
+            acceptedQuantity: Number((inspected - rejected).toFixed(2)),
             rejectedQuantity: rejected,
             rejectionReason: rejected > 0 ? form.rejectionReason.trim() : '',
           },
         ],
-        evidence: form.evidenceFileName && form.evidenceFileUrl ? [
+        evidence: form.evidenceFileUrl.trim() ? [
           {
-            fileName: form.evidenceFileName.trim(),
+            fileName: form.evidenceFileName.trim() || 'inspection-evidence',
             fileUrl: form.evidenceFileUrl.trim(),
-            contentType: 'image/jpeg',
-            fileSizeBytes: 102400,
+            contentType: form.evidenceContentType,
+            fileSizeBytes: form.evidenceFileSizeBytes,
           },
         ] : [],
       }
@@ -210,8 +234,7 @@ export default function QualityInspectionsPage() {
   const inspectedNum = Number(form.inspectedQuantity || 0)
   const rejectedNum = Number(form.rejectedQuantity || 0)
   const acceptedNum = Math.max(0, inspectedNum - rejectedNum)
-  const isAllChecksPassed = form.quantityCheck && form.visualConditionCheck && form.moistureCheck && form.packagingCheck && form.defectsCheck
-  const previewResult = rejectedNum === 0 && isAllChecksPassed ? 'Accepted' : (rejectedNum === inspectedNum || !isAllChecksPassed && rejectedNum > 0) ? 'Rejected' : 'PartiallyAccepted'
+  const previewResult = rejectedNum === 0 ? 'Accepted' : rejectedNum === inspectedNum ? 'Rejected' : 'PartiallyAccepted'
 
   return (
     <div className="stack">
@@ -221,14 +244,14 @@ export default function QualityInspectionsPage() {
         actions={canInspect ? <Button onClick={openRecordModal}>+ Record Inspection</Button> : <StatusBadge status="neutral">Read only</StatusBadge>}
       />
 
-      {recordNotice && (
-        <Card style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>✓ <strong>{recordNotice}</strong></span>
-            <Button variant="secondary" onClick={() => setRecordNotice(null)} style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}>Dismiss</Button>
-          </div>
-        </Card>
-      )}
+      {/* The recording outcome pops up so it cannot be scrolled past. */}
+      <SuccessDialog
+        open={Boolean(recordNotice)}
+        title="Inspection recorded"
+        message={recordNotice ?? ''}
+        confirmLabel="OK"
+        onClose={() => setRecordNotice(null)}
+      />
 
       <div className="grid grid--4">
         {summaryCards.map(([label, value, note, color]) => (
@@ -262,6 +285,8 @@ export default function QualityInspectionsPage() {
                   <th>Checklist</th>
                   <th>Inspected</th>
                   <th>Recorded</th>
+                  <th>Inspector comments</th>
+                  <th>Evidence</th>
                   <th>AI</th>
                 </tr>
               </thead>
@@ -285,6 +310,18 @@ export default function QualityInspectionsPage() {
                         {rejected > 0 && <div className="muted">{rejected} rejected</div>}
                       </td>
                       <td>{inspection.inspectedAt ? new Date(inspection.inspectedAt).toLocaleDateString() : '—'}</td>
+                      <td style={{ minWidth: 160, maxWidth: 280, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{inspection.notes || '—'}</td>
+                      <td>
+                        {(inspection.evidence || []).length === 0 ? 'No evidence' : inspection.evidence.map((file, index) => {
+                          const url = file.fileUrl || ''
+                          const safe = /^https?:\/\//i.test(url) || /^data:image\/[^;]+;base64,/i.test(url)
+                          const image = /^data:image\//i.test(url) || /^image\//i.test(file.contentType || '') || /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url)
+                          return <div key={file.id || index} style={{ marginBottom: 8 }}>
+                            {safe && image && <img src={url} alt={file.fileName || 'Inspection evidence'} loading="lazy" style={{ display: 'block', width: 88, height: 72, objectFit: 'cover', borderRadius: 6 }} />}
+                            {safe ? <a href={url} target="_blank" rel="noopener noreferrer" download={url.startsWith('data:') ? (file.fileName || 'inspection-evidence') : undefined}>{file.fileName || 'View evidence'}</a> : <span>{file.fileName || 'Evidence file'}</span>}
+                          </div>
+                        })}
+                      </td>
                       <td>
                         <Button
                           variant="secondary"
@@ -328,7 +365,10 @@ export default function QualityInspectionsPage() {
               <SelectInput
                 label="Target Delivery"
                 value={form.deliveryId}
-                onChange={(e) => setForm((p) => ({ ...p, deliveryId: e.target.value }))}
+                onChange={(e) => {
+                  const item = deliveries.find(d => String(d.id) === e.target.value)?.items?.[0]
+                  setForm(p => ({ ...p, deliveryId: e.target.value, materialId: item?.materialId ?? '', materialName: item?.material?.name ?? item?.materialName ?? '', inspectedQuantity: item?.receivedQuantity ?? 0 }))
+                }}
                 options={[
                   { value: '', label: 'Select a received delivery…' },
                   ...deliveries.map((d) => ({
@@ -387,7 +427,8 @@ export default function QualityInspectionsPage() {
               <TextInput
                 label="Inspected Quantity"
                 type="number"
-                min="1"
+                min="0"
+                step="0.01"
                 value={String(form.inspectedQuantity)}
                 onChange={(e) => setForm((p) => ({ ...p, inspectedQuantity: Number(e.target.value) }))}
               />
@@ -395,6 +436,7 @@ export default function QualityInspectionsPage() {
                 label="Rejected Quantity"
                 type="number"
                 min="0"
+                step="0.01"
                 max={String(form.inspectedQuantity)}
                 value={String(form.rejectedQuantity)}
                 onChange={(e) => setForm((p) => ({ ...p, rejectedQuantity: Number(e.target.value) }))}
@@ -503,7 +545,7 @@ export default function QualityInspectionsPage() {
               />
               <TextInput
                 label="Evidence File URL (Optional)"
-                value={form.evidenceFileUrl && form.evidenceFileUrl.length > 80 ? `${form.evidenceFileUrl.substring(0, 40)}... (Base64 Image Attached)` : form.evidenceFileUrl}
+                value={form.evidenceFileUrl}
                 onChange={(e) => setForm((p) => ({ ...p, evidenceFileUrl: e.target.value }))}
                 placeholder="e.g. https://storage.buildwise.demo/qc/img-01.jpg"
               />

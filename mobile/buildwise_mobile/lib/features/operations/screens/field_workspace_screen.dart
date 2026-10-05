@@ -9,9 +9,8 @@ import '../services/operations_service.dart';
 
 /// The field workspace home.
 ///
-/// This deliberately does **not** mirror the React dashboard. A site phone is not
-/// a smaller web app: the only question worth answering on the home screen is
-/// **"what do I need to do right now?"**
+/// A focused field workspace retained for direct navigation and field tasks.
+/// MainAppShell uses DashboardScreen as the home for every role, matching React.
 ///
 /// Each of the three field roles gets its own workspace, built from the same API
 /// calls their own screens already use:
@@ -41,7 +40,10 @@ class _FieldWorkspaceScreenState extends State<FieldWorkspaceScreen> {
   bool _loading = true;
   String? _error;
 
-  // Site Engineer
+  // Site Engineer. The workspace answers "what do I need to chase?" from the
+  // engineer's own material requests: counts by status plus the soonest
+  // required dates. `field_workspace_test` pins `listMyRequests` as the
+  // source, so the queue is loaded here rather than inferred.
   List<Map<String, dynamic>> _requests = const [];
 
   // Site Officer
@@ -67,6 +69,8 @@ class _FieldWorkspaceScreenState extends State<FieldWorkspaceScreen> {
     });
     try {
       if (_isEngineer) {
+        // The engineer's own queue, so the counts and the soonest required
+        // dates below describe this person's requests only.
         _requests = await _service.listMyRequests();
       } else if (_isOfficer) {
         _orders = await _service.listConfirmedOrders();
@@ -147,8 +151,8 @@ class _FieldWorkspaceScreenState extends State<FieldWorkspaceScreen> {
           children: _isEngineer
               ? _engineerWorkspace()
               : _isOfficer
-                  ? _officerWorkspace()
-                  : _inspectorWorkspace(),
+              ? _officerWorkspace()
+              : _inspectorWorkspace(),
         ),
       ),
     );
@@ -189,10 +193,12 @@ class _FieldWorkspaceScreenState extends State<FieldWorkspaceScreen> {
     final revision = _countRequests({'RevisionRequested', 'Draft'});
 
     // Soonest required date first: that is what the site is waiting on.
-    final recent = [..._requests]..sort(
-          (a, b) => (a['requiredDate']?.toString() ?? '')
-              .compareTo(b['requiredDate']?.toString() ?? ''),
-        );
+    final recent = [..._requests]
+      ..sort(
+        (a, b) => (a['requiredDate']?.toString() ?? '').compareTo(
+          b['requiredDate']?.toString() ?? '',
+        ),
+      );
 
     return [
       const SectionHeader(title: 'My Requests'),
@@ -246,72 +252,72 @@ class _FieldWorkspaceScreenState extends State<FieldWorkspaceScreen> {
   }
 
   Widget _requestCard(Map<String, dynamic> request) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: AppCard(
-          onTap: _goToWorkspace,
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'MR-${request['id'] ?? '—'}',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      request['reason']?.toString() ?? 'Material request',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Required ${FieldFormat.date(request['requiredDate'])}',
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                  ],
+    padding: const EdgeInsets.only(bottom: 10),
+    child: AppCard(
+      onTap: _goToWorkspace,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'MR-${request['id'] ?? '—'}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
-              ),
-              const SizedBox(width: 10),
-              StatusChip(
-                label: FieldFormat.humanize(request['status']?.toString()),
-                tone: FieldFormat.statusTone(request['status']?.toString()),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  request['reason']?.toString() ?? 'Material request',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Required ${FieldFormat.date(request['requiredDate'])}',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
+            ),
           ),
-        ),
-      );
+          const SizedBox(width: 10),
+          StatusChip(
+            label: FieldFormat.humanize(request['status']?.toString()),
+            tone: FieldFormat.statusTone(request['status']?.toString()),
+          ),
+        ],
+      ),
+    ),
+  );
   // ---------------------------------------------------- Site Officer
 
   List<Widget> _officerWorkspace() => [
-        const SectionHeader(title: 'Delivery Workspace'),
-        const SizedBox(height: 8),
-        _CountTile(
-          value: _orders.length,
-          label: 'Orders awaiting receipt',
-          tone: _orders.isEmpty ? StatusTone.success : StatusTone.warning,
+    const SectionHeader(title: 'Delivery Workspace'),
+    const SizedBox(height: 8),
+    _CountTile(
+      value: _orders.length,
+      label: 'Orders awaiting receipt',
+      tone: _orders.isEmpty ? StatusTone.success : StatusTone.warning,
+    ),
+    const SizedBox(height: 18),
+    AppButton(
+      label: 'Receive Delivery',
+      expand: true,
+      onPressed: _orders.isEmpty ? null : _goToWorkspace,
+    ),
+    const SizedBox(height: 22),
+    const SectionHeader(title: 'Confirmed orders'),
+    const SizedBox(height: 8),
+    if (_orders.isEmpty)
+      const AppCard(
+        child: Text(
+          'No confirmed purchase orders are waiting. An order appears here '
+          'once procurement and the Procurement Manager complete it.',
         ),
-        const SizedBox(height: 18),
-        AppButton(
-          label: 'Receive Delivery',
-          expand: true,
-          onPressed: _orders.isEmpty ? null : _goToWorkspace,
-        ),
-        const SizedBox(height: 22),
-        const SectionHeader(title: 'Confirmed orders'),
-        const SizedBox(height: 8),
-        if (_orders.isEmpty)
-          const AppCard(
-            child: Text(
-              'No confirmed purchase orders are waiting. An order appears here '
-              'once procurement and the Procurement Manager complete it.',
-            ),
-          )
-        else
-          ..._orders.take(8).map(_orderCard),
-      ];
+      )
+    else
+      ..._orders.take(8).map(_orderCard),
+  ];
 
   Widget _orderCard(Map<String, dynamic> order) {
     final items = (order['items'] as List<dynamic>?) ?? const [];
@@ -373,46 +379,46 @@ class _FieldWorkspaceScreenState extends State<FieldWorkspaceScreen> {
       _ncrs.where((ncr) => ncr['status']?.toString() != 'Closed').length;
 
   List<Widget> _inspectorWorkspace() => [
-        const SectionHeader(title: 'Inspection Workspace'),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _CountTile(
-                value: _orders.length,
-                label: 'Awaiting inspection',
-                tone: _orders.isEmpty ? StatusTone.success : StatusTone.warning,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _CountTile(
-                value: _openNcrs,
-                label: 'Open NCRs',
-                tone: _openNcrs == 0 ? StatusTone.success : StatusTone.danger,
-              ),
-            ),
-          ],
+    const SectionHeader(title: 'Inspection Workspace'),
+    const SizedBox(height: 8),
+    Row(
+      children: [
+        Expanded(
+          child: _CountTile(
+            value: _orders.length,
+            label: 'Awaiting inspection',
+            tone: _orders.isEmpty ? StatusTone.success : StatusTone.warning,
+          ),
         ),
-        const SizedBox(height: 18),
-        AppButton(
-          label: 'Start Inspection',
-          expand: true,
-          onPressed: _goToWorkspace,
+        const SizedBox(width: 10),
+        Expanded(
+          child: _CountTile(
+            value: _openNcrs,
+            label: 'Open NCRs',
+            tone: _openNcrs == 0 ? StatusTone.success : StatusTone.danger,
+          ),
         ),
-        const SizedBox(height: 22),
-        const SectionHeader(title: 'Awaiting inspection'),
-        const SizedBox(height: 8),
-        if (_orders.isEmpty)
-          const AppCard(
-            child: Text(
-              'Nothing is waiting for inspection. A delivery appears here once the '
-              'Site Officer has recorded it as received.',
-            ),
-          )
-        else
-          ..._orders.take(8).map(_pendingInspectionCard),
-      ];
+      ],
+    ),
+    const SizedBox(height: 18),
+    AppButton(
+      label: 'Start Inspection',
+      expand: true,
+      onPressed: _goToWorkspace,
+    ),
+    const SizedBox(height: 22),
+    const SectionHeader(title: 'Awaiting inspection'),
+    const SizedBox(height: 8),
+    if (_orders.isEmpty)
+      const AppCard(
+        child: Text(
+          'Nothing is waiting for inspection. A delivery appears here once the '
+          'Site Officer has recorded it as received.',
+        ),
+      )
+    else
+      ..._orders.take(8).map(_pendingInspectionCard),
+  ];
 
   Widget _pendingInspectionCard(Map<String, dynamic> delivery) {
     final status = delivery['status']?.toString();
@@ -457,11 +463,20 @@ class _FieldWorkspaceScreenState extends State<FieldWorkspaceScreen> {
 /// without this screen needing to know the shell's tab layout.
 abstract class WorkspaceNavigator {
   void openWorkspace();
+
+  /// Opens the tab carrying a web route (e.g. `/material-requests`), so a
+  /// dashboard quick action or alert behaves exactly like the web dashboard's
+  /// `navigate(route)`.
+  void openRoute(String route);
 }
 
 /// One headline number, e.g. "3 Pending".
 class _CountTile extends StatelessWidget {
-  const _CountTile({required this.value, required this.label, required this.tone});
+  const _CountTile({
+    required this.value,
+    required this.label,
+    required this.tone,
+  });
 
   final int value;
   final String label;
@@ -469,34 +484,34 @@ class _CountTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceMuted,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: AppColors.surfaceMuted,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$value',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: _toneColor(tone),
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$value',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                color: _toneColor(tone),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      );
+        const SizedBox(height: 4),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    ),
+  );
 
   static Color _toneColor(StatusTone tone) => switch (tone) {
-        StatusTone.success => AppColors.success,
-        StatusTone.warning => AppColors.warning,
-        StatusTone.danger => AppColors.danger,
-        StatusTone.info => AppColors.primary,
-        StatusTone.neutral => AppColors.textMuted,
-      };
+    StatusTone.success => AppColors.success,
+    StatusTone.warning => AppColors.warning,
+    StatusTone.danger => AppColors.danger,
+    StatusTone.info => AppColors.primary,
+    StatusTone.neutral => AppColors.textMuted,
+  };
 }

@@ -14,6 +14,8 @@ class AppTextField extends StatelessWidget {
     this.onTap,
     this.obscureText = false,
     this.onChanged,
+    this.onSubmitted,
+    this.textInputAction,
   });
   final String label;
   final String? hint;
@@ -26,6 +28,8 @@ class AppTextField extends StatelessWidget {
   final VoidCallback? onTap;
   final bool obscureText;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+  final TextInputAction? textInputAction;
 
   @override
   Widget build(BuildContext context) => TextField(
@@ -36,6 +40,8 @@ class AppTextField extends StatelessWidget {
     onTap: onTap,
     obscureText: obscureText,
     onChanged: onChanged,
+    onSubmitted: onSubmitted,
+    textInputAction: textInputAction,
     decoration: InputDecoration(
       labelText: label,
       hintText: hint,

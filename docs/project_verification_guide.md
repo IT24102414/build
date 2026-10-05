@@ -1,3 +1,9 @@
+# Current verification status (2026-10-05)
+
+See [submission-readiness.md](submission-readiness.md) and the [root README](../README.md) for current evidence. API: 307 tests; Python: 28; React: 163; Flutter: 149. Both browser builds passed. The historical blocker list below is superseded: camera/gallery is implemented; a supplier portal and FCM are not mandatory for the chosen scope. Deployment and current physical-device/APK evidence remain unverified.
+
+## Historical verification guide
+
 # BuildSupply LK complete-project verification guide
 
 Last code audit: **24 September 2026**.

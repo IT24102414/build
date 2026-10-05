@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, TextInput, SelectInput } from '../components/shared'
+import { Button, Card, Drawer, EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, SuccessDialog, TextInput, SelectInput } from '../components/shared'
 import { procurementApi } from '../Features/procurement/services/procurementApi'
 import { statusTone } from '../Features/procurement/components/statusTone'
+import { isValidEmail } from '../utils/sriLankaValidation'
 import { useAuth } from '../auth/AuthContext'
 import { hasAnyRole, ROLES } from '../auth/accessControl'
 import './common/common.css'
@@ -23,7 +24,7 @@ function isFutureDate(dateStr) {
 
 export default function RfqPage() {
   const { roles } = useAuth()
-  const canIssue = hasAnyRole(roles, [ROLES.ProcurementOfficer, ROLES.ProcurementManager, ROLES.Administrator])
+  const canIssue = hasAnyRole(roles, [ROLES.ProcurementOfficer, ROLES.Administrator])
 
   const [rfqs, setRfqs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -110,13 +111,20 @@ export default function RfqPage() {
       setFormError('Select at least one supplier to invite.')
       return
     }
+    // The optional copy-to address must be a real mailbox if it was given —
+    // the same rule the supplier form applies to supplier emails.
+    const additionalEmail = form.additionalEmail.trim()
+    if (additionalEmail && !isValidEmail(additionalEmail)) {
+      setFormError('Please enter a valid notification email address (e.g. procurement.manager@gmail.com).')
+      return
+    }
 
     setError('')
     try {
       const created = await procurementApi.createRfq({
         ...form,
         materialRequestId: Number(form.materialRequestId),
-        additionalEmail: form.additionalEmail.trim() || undefined,
+        additionalEmail: additionalEmail || undefined,
       })
       setCreating(false)
       setNotice(`✓ RFQ #${created.id} issued successfully! Automated email invitations have been dispatched to the invited suppliers and procurement desk.`)
@@ -146,9 +154,12 @@ export default function RfqPage() {
         recipientEmail: dispatchEmail.trim(),
         customMessage: customMsg.trim() || undefined,
       })
-      setEmailStatus(`✓ ${res.message || 'RFQ notification email sent successfully!'}`)
-      setDispatchEmail('')
-      setCustomMsg('')
+      const sent = res.emailSent === true
+      setEmailStatus(`${sent ? '✓' : '⚠'} ${res.message || (sent ? 'RFQ notification email sent successfully!' : 'Email was not sent. Check the server email configuration and retry.')}`)
+      if (sent) {
+        setDispatchEmail('')
+        setCustomMsg('')
+      }
     } catch (err) {
       setEmailStatus(`⚠ ${err.message}`)
     } finally {
@@ -172,14 +183,14 @@ export default function RfqPage() {
         actions={canIssue ? <Button onClick={openCreate}>+ Issue RFQ</Button> : null}
       />
 
-      {notice && (
-        <Card style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>{notice}</span>
-            <Button variant="secondary" onClick={() => setNotice('')} style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}>Dismiss</Button>
-          </div>
-        </Card>
-      )}
+      {/* Success pops up rather than sitting in a banner the user may miss. */}
+      <SuccessDialog
+        open={Boolean(notice)}
+        title="RFQ issued"
+        message={notice}
+        confirmLabel="OK"
+        onClose={() => setNotice('')}
+      />
 
       {error && <ErrorState message={error} />}
 
@@ -225,6 +236,11 @@ export default function RfqPage() {
                 value={form.additionalEmail}
                 onChange={(e) => setForm((c) => ({ ...c, additionalEmail: e.target.value }))}
                 placeholder="e.g. procurement.manager@buildwise.demo"
+                error={
+                  form.additionalEmail.trim() && !isValidEmail(form.additionalEmail.trim())
+                    ? 'Please enter a valid notification email address (e.g. procurement.manager@gmail.com).'
+                    : undefined
+                }
                 hint="A copy of the RFQ requirements will be emailed to this address upon issuance."
               />
               <TextInput

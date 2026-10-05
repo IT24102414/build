@@ -52,7 +52,8 @@ class ProcurementStatusWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final (title, message, icon) = _copy[info.status]!;
     final tone = _tones[info.status]!;
-    final label = info.status == ProcurementStatus.purchaseOrderCreated &&
+    final label =
+        info.status == ProcurementStatus.purchaseOrderCreated &&
             info.purchaseOrderId != null
         ? 'Purchase Order Created (PO #${info.purchaseOrderId})'
         : title;

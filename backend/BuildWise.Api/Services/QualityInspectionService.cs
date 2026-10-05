@@ -27,36 +27,6 @@ public class QualityInspectionService
 
     public async Task<Inspection> CompleteInspectionAsync(CompleteInspectionDto dto, int inspectorUserId)
     {
-        if (dto.Items == null || dto.Items.Count == 0)
-            throw new InvalidOperationException("An inspection must contain at least one material line.");
-        if (dto.Evidence?.Count > 10)
-            throw new InvalidOperationException("An inspection can contain at most 10 evidence records.");
-        if (dto.Evidence?.Any(e => string.IsNullOrWhiteSpace(e.FileName) || string.IsNullOrWhiteSpace(e.FileUrl) || !Uri.TryCreate(e.FileUrl, UriKind.Absolute, out _)) == true)
-            throw new InvalidOperationException("Each evidence record requires a file name and an absolute URL.");
-        if (dto.Evidence?.Any(e => e.FileSizeBytes is < 0 or > 10_000_000) == true)
-            throw new InvalidOperationException("Evidence files must be between 0 bytes and 10 MB.");
-
-        if (dto.Items.Any(i => i.RejectedQuantity > 0 && string.IsNullOrWhiteSpace(i.RejectionReason)))
-            throw new InvalidOperationException("A rejection reason is required for every rejected material line.");
-        if (dto.Items.Any(i => i.InspectedQuantity <= 0 || i.AcceptedQuantity < 0 || i.RejectedQuantity < 0 || i.AcceptedQuantity + i.RejectedQuantity != i.InspectedQuantity))
-            throw new InvalidOperationException("Inspection quantities must be non-negative and accepted plus rejected must equal inspected quantity.");
-
-        // Rule: a failed checklist point must be explained. The five checks are
-        // mandatory, but recording "fail" with no reason leaves an unusable quality
-        // record — nobody can tell later whether the defect was cosmetic or
-        // structural. The reason lives in Notes, which is the only free-text field
-        // on the inspection, so an explicit note is required when any check failed.
-        var failedChecks = new List<string>();
-        if (dto.QuantityCheck is false) failedChecks.Add("quantity");
-        if (dto.VisualConditionCheck is false) failedChecks.Add("visual condition");
-        if (dto.MoistureCheck is false) failedChecks.Add("moisture");
-        if (dto.PackagingCheck is false) failedChecks.Add("packaging");
-        if (dto.DefectsCheck is false) failedChecks.Add("defects");
-        if (failedChecks.Count > 0 && string.IsNullOrWhiteSpace(dto.Notes))
-            throw new InvalidOperationException(
-                "A reason is required when a checklist item fails: " +
-                string.Join(", ", failedChecks) + ". Describe the failure in the notes field.");
-
         return await CompleteInspectionAsync(new Inspection
         {
             DeliveryId = dto.DeliveryId,
@@ -71,10 +41,10 @@ public class QualityInspectionService
             DefectsCheck = dto.DefectsCheck,
             Evidence = (dto.Evidence ?? new()).Select(e => new InspectionEvidence
             {
-                FileName = e.FileName.Trim(), FileUrl = e.FileUrl.Trim(), ContentType = e.ContentType,
+                FileName = e.FileName?.Trim() ?? string.Empty, FileUrl = e.FileUrl?.Trim() ?? string.Empty, ContentType = e.ContentType,
                 FileSizeBytes = e.FileSizeBytes, UploadedByUserId = inspectorUserId, UploadedAt = DateTime.UtcNow
             }).ToList(),
-            Items = dto.Items.Select(i => new InspectionItem
+            Items = (dto.Items ?? new()).Select(i => new InspectionItem
             {
                 MaterialId = i.MaterialId, InspectedQuantity = i.InspectedQuantity,
                 AcceptedQuantity = i.AcceptedQuantity, RejectedQuantity = i.RejectedQuantity,
@@ -88,6 +58,38 @@ public class QualityInspectionService
     /// </summary>
     public async Task<Inspection> CompleteInspectionAsync(Inspection inspection)
     {
+        if (inspection.DeliveryId <= 0)
+            throw new InvalidOperationException("Delivery must be selected.");
+        if (inspection.Items == null || inspection.Items.Count == 0)
+            throw new InvalidOperationException("An inspection must contain at least one material line.");
+        if (inspection.Evidence?.Count > 10)
+            throw new InvalidOperationException("An inspection can contain at most 10 evidence files.");
+        foreach (var evidence in inspection.Evidence ?? new())
+        {
+            if (string.IsNullOrWhiteSpace(evidence.FileName) || string.IsNullOrWhiteSpace(evidence.FileUrl)
+                || (!evidence.FileUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+                    && !Uri.TryCreate(evidence.FileUrl, UriKind.Absolute, out _)))
+                throw new InvalidOperationException("Each evidence record requires a file name and an absolute URL.");
+            if (evidence.FileSizeBytes is < 0 or > 10_000_000)
+                throw new InvalidOperationException("Evidence files must be 10 MB or less.");
+            if (evidence.FileUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                var comma = evidence.FileUrl.IndexOf(',');
+                if (comma < 0 || !evidence.FileUrl[..comma].EndsWith(";base64", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Evidence data must be a valid base64 file.");
+                byte[] bytes;
+                try { bytes = Convert.FromBase64String(evidence.FileUrl[(comma + 1)..]); }
+                catch (FormatException) { throw new InvalidOperationException("Evidence data must be a valid base64 file."); }
+                if (bytes.LongLength > 10_000_000)
+                    throw new InvalidOperationException("Evidence files must be 10 MB or less.");
+                evidence.FileSizeBytes = bytes.LongLength;
+            }
+        }
+        if (new[] { inspection.QuantityCheck, inspection.VisualConditionCheck, inspection.MoistureCheck,
+                inspection.PackagingCheck, inspection.DefectsCheck }.Any(check => check is false)
+            && string.IsNullOrWhiteSpace(inspection.Notes))
+            throw new InvalidOperationException("Notes are required when any checklist item fails.");
+
         // Rule 0: the five-point checklist is mandatory on completion.
         //
         // A completed inspection is a quality record, and "did nobody check the
@@ -149,10 +151,10 @@ public class QualityInspectionService
                     $"Material {item.MaterialId} is not part of delivery #{inspection.DeliveryId}. " +
                     "Only materials recorded as received on this delivery can be inspected.");
 
-            if (item.AcceptedQuantity < 0 || item.RejectedQuantity < 0 || item.InspectedQuantity < 0)
+            if (item.AcceptedQuantity < 0 || item.RejectedQuantity < 0 || item.InspectedQuantity <= 0)
             {
                 throw new InvalidOperationException(
-                    $"Inspected, accepted and rejected quantities cannot be negative for material {item.MaterialId}.");
+                    $"Inspected quantity must be greater than zero; accepted and rejected quantities cannot be negative for material {item.MaterialId}.");
             }
 
             if (item.InspectedQuantity > available)
@@ -183,6 +185,10 @@ public class QualityInspectionService
                 hasRejections = true;
             }
         }
+
+        foreach (var group in inspection.Items.GroupBy(item => item.MaterialId))
+            if (group.Sum(item => item.InspectedQuantity) > availableByMaterial[group.Key])
+                throw new InvalidOperationException($"Total inspected quantity cannot exceed received quantity for material {group.Key}.");
 
         var materialIds = inspection.Items.Select(item => item.MaterialId).Distinct().ToList();
         var materials = await _context.Materials

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'core/auth/buildwise_roles.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/react_app_shell.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/web_only_notice_screen.dart';
 import 'features/auth/services/auth_service.dart';
@@ -12,6 +13,7 @@ import 'features/operations/screens/administration_screen.dart';
 import 'features/operations/screens/agent_workflows_screen.dart';
 import 'features/operations/screens/approvals_screen.dart';
 import 'features/operations/screens/delivery_receiving_screen.dart';
+import 'features/operations/screens/dashboard_screen.dart';
 import 'features/operations/screens/field_workspace_screen.dart';
 import 'features/operations/screens/material_requests_screen.dart';
 import 'features/operations/screens/quality_inspection_screen.dart';
@@ -21,6 +23,7 @@ import 'features/procurement/screens/purchase_orders_screen.dart';
 import 'features/procurement/screens/quotation_comparison_screen.dart';
 import 'features/procurement/screens/quotation_entry_screen.dart';
 import 'features/procurement/screens/rfq_screen.dart';
+import 'features/procurement/screens/suppliers_screen.dart';
 import 'features/procurement/services/notification_service.dart';
 
 void main() => runApp(const BuildWiseApp());
@@ -59,7 +62,7 @@ class _AuthGateState extends State<AuthGate> {
     _signedInFuture = _authService.isSignedIn();
   }
 
-    // These must use a block body, not `() => _signedInFuture = ...`.
+  // These must use a block body, not `() => _signedInFuture = ...`.
   // An arrow function whose body is an assignment expression evaluates to the
   // *assigned value*, so `setState` would receive a `Future` as the result of
   // its `VoidCallback` and throw "setState() callback argument returned a
@@ -95,7 +98,10 @@ class _AuthGateState extends State<AuthGate> {
           operationsService: widget.operationsService,
         );
       }
-      return LoginScreen(onSignedIn: _handleSignedIn, authService: _authService);
+      return LoginScreen(
+        onSignedIn: _handleSignedIn,
+        authService: _authService,
+      );
     },
   );
 }
@@ -122,6 +128,7 @@ class _MainAppShellState extends State<MainAppShell>
     implements WorkspaceNavigator {
   int selectedIndex = 0;
   List<String> _roles = const [];
+  String _displayName = 'BuildWise user';
   late final AuthService _authService = widget.authService ?? AuthService();
   late final OperationsService _operationsService =
       widget.operationsService ?? OperationsService();
@@ -134,7 +141,10 @@ class _MainAppShellState extends State<MainAppShell>
   void initState() {
     super.initState();
     _sessionFuture = _loadSession();
-    _notificationTimer = Timer.periodic(const Duration(seconds: 30), (_) => _pollNotifications(showDeviceNotification: true));
+    _notificationTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _pollNotifications(showDeviceNotification: true),
+    );
   }
 
   @override
@@ -150,6 +160,7 @@ class _MainAppShellState extends State<MainAppShell>
         // Legacy role names are folded into their canonical equivalent and any
         // unrecognised claim (e.g. a stray `Supplier`) is dropped, so every
         // capability check below sees one of the seven internal roles.
+        _displayName = user?['fullName']?.toString() ?? 'BuildWise user';
         _roles = BuildWiseRoles.normalize(
           ((user?['roles'] as List<dynamic>?) ?? const []).cast<String>(),
         ).toList();
@@ -158,7 +169,9 @@ class _MainAppShellState extends State<MainAppShell>
     }
   }
 
-  Future<void> _pollNotifications({required bool showDeviceNotification}) async {
+  Future<void> _pollNotifications({
+    required bool showDeviceNotification,
+  }) async {
     // The notifications API is internal-staff only, and an account that resolved
     // to no internal role has no mobile surface to surface a notification on.
     if (!BuildWiseRoles.isInternalStaff(_roles)) return;
@@ -171,11 +184,20 @@ class _MainAppShellState extends State<MainAppShell>
         final id = (row['id'] as num?)?.toInt() ?? 0;
         if (id == 0 || !_notifiedNotificationIds.add(id)) continue;
         final title = row['title']?.toString() ?? 'BuildWise update';
-        final body = row['body']?.toString() ?? 'Your workflow has a new update.';
+        final body =
+            row['body']?.toString() ?? 'Your workflow has a new update.';
         if (row['type'] == 'QualityInspectionCompleted') {
-          await NotificationService.instance.showQualityUpdate(id: id, title: title, body: body);
+          await NotificationService.instance.showQualityUpdate(
+            id: id,
+            title: title,
+            body: body,
+          );
         } else {
-          await NotificationService.instance.showProcurementUpdate(id: id, title: title, body: body);
+          await NotificationService.instance.showProcurementUpdate(
+            id: id,
+            title: title,
+            body: body,
+          );
         }
       }
     } catch (_) {
@@ -187,7 +209,9 @@ class _MainAppShellState extends State<MainAppShell>
     if (!BuildWiseRoles.isInternalStaff(_roles)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Notifications are available on the BuildWise web app.'),
+          content: Text(
+            'Notifications are available on the BuildWise web app.',
+          ),
         ),
       );
       return;
@@ -203,66 +227,50 @@ class _MainAppShellState extends State<MainAppShell>
             shrinkWrap: true,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              Text('Notifications', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'Notifications',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 12),
               if (rows.isEmpty) const Text('No notifications yet.'),
-              ...rows.map((row) => ListTile(
-                leading: Icon(row['isRead'] == true ? Icons.notifications_none : Icons.notifications_active, color: row['isRead'] == true ? AppColors.textMuted : AppColors.primary),
-                title: Text('${row['title']}'),
-                subtitle: Text('${row['body']}'),
-                onTap: () async {
-                  final id = (row['id'] as num?)?.toInt();
-                  if (id != null && row['isRead'] != true) await _operationsService.markNotificationRead(id);
-                  if (context.mounted) Navigator.pop(context);
-                },
-              )),
+              ...rows.map(
+                (row) => ListTile(
+                  leading: Icon(
+                    row['isRead'] == true
+                        ? Icons.notifications_none
+                        : Icons.notifications_active,
+                    color: row['isRead'] == true
+                        ? AppColors.textMuted
+                        : AppColors.primary,
+                  ),
+                  title: Text('${row['title']}'),
+                  subtitle: Text('${row['body']}'),
+                  onTap: () async {
+                    final id = (row['id'] as num?)?.toInt();
+                    if (id != null && row['isRead'] != true) {
+                      await _operationsService.markNotificationRead(id);
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                ),
+              ),
             ],
           ),
         ),
       );
       await _pollNotifications(showDeviceNotification: false);
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
     }
   }
 
   bool _has(Set<String> roles) => roles.any(_roles.contains);
-
-  /// Human-readable name for a role, shown in the app bar.
-  static String _roleLabel(String role) => switch (role) {
-        BuildWiseRoles.procurementOfficer => 'Procurement Officer',
-        BuildWiseRoles.procurementManager => 'Procurement Manager',
-        BuildWiseRoles.siteManager => 'Site Manager',
-        BuildWiseRoles.siteEngineer => 'Site Engineer',
-        BuildWiseRoles.siteOfficer => 'Site Officer',
-        BuildWiseRoles.qualityInspector => 'Quality Inspector',
-        _ => 'Administrator',
-      };
-
-  /// This session's role, for display. Null when the account holds no internal
-  /// role, since there is nothing meaningful to name.
-  String? get _sessionRoleLabel {
-    for (final role in _roles) {
-      return _roleLabel(role);
-    }
-    return null;
-  }
-
-  /// The single field role this session represents, used by the field workspace.
-  ///
-  /// A desk-only account (Procurement Officer, Administrator) has no field work
-  /// and never reaches `FieldWorkspaceScreen`; this returns a safe default for
-  /// the mixed case where one account holds both a desk and a field role.
-  String get _fieldRole {
-    for (final role in <String>[
-      BuildWiseRoles.siteEngineer,
-      BuildWiseRoles.siteOfficer,
-      BuildWiseRoles.qualityInspector,
-    ]) {
-      if (_roles.contains(role)) return role;
-    }
-    return BuildWiseRoles.siteEngineer;
-  }
 
   /// The destination label holding this role's work, used by the field
   /// workspace to hand off to the right tab.
@@ -310,38 +318,73 @@ class _MainAppShellState extends State<MainAppShell>
     // The Site Engineer raises and tracks material requests. The Site Officer
     // receives physical deliveries against a confirmed PO. The Quality
     // Inspector runs the five-point checklist and raises NCRs.
-    if (_has({BuildWiseRoles.siteEngineer})) {
+    if (_has(BuildWiseRoles.requestReaders) &&
+        !_has(BuildWiseRoles.approvers)) {
       destinations.add(
         _MobileDestination(
           label: 'Requests',
           icon: Icons.assignment_outlined,
           selectedIcon: Icons.assignment,
-          builder: (_) => const MaterialRequestsScreen(),
+          builder: (_) => MaterialRequestsScreen(
+            service: _operationsService,
+            ownRequestsOnly: _has(BuildWiseRoles.siteOperations),
+            readOnly: !_has({BuildWiseRoles.siteEngineer}),
+            canApprove: false,
+          ),
         ),
       );
     }
 
-    if (_has({BuildWiseRoles.siteOfficer})) {
+    if (BuildWiseRoles.isInternalStaff(_roles)) {
       destinations.add(
         _MobileDestination(
           label: 'Deliveries',
           icon: Icons.local_shipping_outlined,
           selectedIcon: Icons.local_shipping,
-          builder: (_) => const DeliveryReceivingScreen(),
+          builder: (_) => DeliveryReceivingScreen(
+            service: _operationsService,
+            readOnly: !_has(BuildWiseRoles.deliveryReceivers),
+          ),
         ),
       );
     }
 
-    if (_has({BuildWiseRoles.qualityInspector})) {
-      destinations.add(
-        _MobileDestination(
-          label: 'Inspections',
-          icon: Icons.fact_check_outlined,
-          selectedIcon: Icons.fact_check,
-          builder: (_) => const QualityInspectionScreen(),
+    // Quality Inspections & NCRs are readable by every internal role — the
+    // backend `QualityReaders` policy now grants the whole procurement desk
+    // the same read the web sidebar offers. The *write* controls stay gated:
+    // completing an inspection is QualityControlOnly (Quality Inspector /
+    // Administrator) and moving an NCR to Resolved/Closed is
+    // ProcurementDecisionOnly (Procurement Manager / Site Manager /
+    // Administrator), so a reader is never shown a button that would 403.
+    destinations.add(
+      _MobileDestination(
+        label: 'Inspections',
+        icon: Icons.fact_check_outlined,
+        selectedIcon: Icons.fact_check,
+        builder: (_) => QualityInspectionScreen(
+          service: _operationsService,
+          readOnly: !_has({
+            BuildWiseRoles.qualityInspector,
+            BuildWiseRoles.administrator,
+          }),
+          canManageNcrs: _has(BuildWiseRoles.approvers),
         ),
-      );
-    }
+      ),
+    );
+
+    destinations.add(
+      _MobileDestination(
+        label: 'NCRs',
+        icon: Icons.report_outlined,
+        selectedIcon: Icons.report,
+        builder: (_) => QualityInspectionScreen(
+          service: _operationsService,
+          readOnly: true,
+          ncrOnly: true,
+          canManageNcrs: _has(BuildWiseRoles.approvers),
+        ),
+      ),
+    );
 
     // --- Approval gate ---------------------------------------------------
     // The human decision a manager makes on someone else's request. The same
@@ -352,7 +395,7 @@ class _MainAppShellState extends State<MainAppShell>
           label: 'Approvals',
           icon: Icons.how_to_reg_outlined,
           selectedIcon: Icons.how_to_reg,
-          builder: (_) => const ApprovalsScreen(),
+          builder: (_) => ApprovalsScreen(service: _operationsService),
         ),
       );
     }
@@ -362,12 +405,26 @@ class _MainAppShellState extends State<MainAppShell>
     // by email and are keyed in here, then ranked by the quotation agent
     // (:8001) and approved by a human before any purchase order exists.
     if (_has(BuildWiseRoles.procurementDesk)) {
+      // The supplier directory: the contact records the desk emails RFQs to.
+      // Field rules are identical to the web Add Supplier form.
+      destinations.add(
+        _MobileDestination(
+          label: 'Suppliers',
+          icon: Icons.storefront_outlined,
+          selectedIcon: Icons.storefront,
+          builder: (_) =>
+              SuppliersScreen(canEdit: _has(BuildWiseRoles.supplierEditors)),
+        ),
+      );
       destinations.add(
         _MobileDestination(
           label: 'RFQs',
           icon: Icons.mark_email_read_outlined,
           selectedIcon: Icons.mark_email_read,
-          builder: (_) => const RfqScreen(),
+          builder: (_) => RfqScreen(
+            canIssue: _has(BuildWiseRoles.supplierEditors),
+            canClose: _has(BuildWiseRoles.procurementWriters),
+          ),
         ),
       );
       destinations.add(
@@ -375,30 +432,45 @@ class _MainAppShellState extends State<MainAppShell>
           label: 'Quotations',
           icon: Icons.compare_arrows_outlined,
           selectedIcon: Icons.compare_arrows,
-          builder: (_) => const QuotationComparisonScreen(),
+          builder: (_) => QuotationComparisonScreen(
+            // Running the agent and recording the accept/override decision is a
+            // manager action; an officer gets the read-only comparison.
+            canApprove: _has(BuildWiseRoles.approvers),
+            canRunAgent: _has({
+              BuildWiseRoles.procurementOfficer,
+              BuildWiseRoles.administrator,
+            }),
+          ),
         ),
       );
       // Keying in what a supplier returned by email — the mobile counterpart of
       // the web app's QuotationEntryForm, on the same endpoint.
-      destinations.add(
-        _MobileDestination(
-          label: 'Record',
-          icon: Icons.post_add_outlined,
-          selectedIcon: Icons.post_add,
-          builder: (_) => const QuotationEntryScreen(),
-        ),
-      );
-      // The purchase order register. Reporting only: an order exists because a
-      // manager approved a workflow, never because this screen was used.
-      destinations.add(
-        _MobileDestination(
-          label: 'Orders',
-          icon: Icons.receipt_long_outlined,
-          selectedIcon: Icons.receipt_long,
-          builder: (_) => const PurchaseOrdersScreen(),
-        ),
-      );
+      if (_has(BuildWiseRoles.supplierEditors)) {
+        destinations.add(
+          _MobileDestination(
+            label: 'Record',
+            icon: Icons.post_add_outlined,
+            selectedIcon: Icons.post_add,
+            builder: (_) => const QuotationEntryScreen(),
+          ),
+        );
+      }
     }
+
+    // The purchase order register. Reporting only: an order exists because a
+    // manager approved a workflow, never because this screen was used.
+    destinations.add(
+      _MobileDestination(
+        label: 'Orders',
+        icon: Icons.receipt_long_outlined,
+        selectedIcon: Icons.receipt_long,
+        // Read-only by design: a purchase order only ever comes from an
+        // approved workflow, never from this register.
+        builder: (_) => PurchaseOrdersScreen(
+          canManage: _has(BuildWiseRoles.procurementWriters),
+        ),
+      ),
+    );
 
     // Read-only procurement progress for the site roles, so the engineer can
     // answer "what happened to my request?" without ever seeing supplier names
@@ -421,7 +493,7 @@ class _MainAppShellState extends State<MainAppShell>
           label: 'Admin',
           icon: Icons.admin_panel_settings_outlined,
           selectedIcon: Icons.admin_panel_settings,
-          builder: (_) => const AdministrationScreen(),
+          builder: (_) => AdministrationScreen(service: _operationsService),
         ),
       );
     }
@@ -433,7 +505,7 @@ class _MainAppShellState extends State<MainAppShell>
         label: 'Agents',
         icon: Icons.hub_outlined,
         selectedIcon: Icons.hub,
-        builder: (_) => const AgentWorkflowsScreen(),
+        builder: (_) => AgentWorkflowsScreen(service: _operationsService),
       ),
     );
 
@@ -442,35 +514,40 @@ class _MainAppShellState extends State<MainAppShell>
 
   /// The home tab. Field roles get the "what do I do now?" workspace; desk roles
   /// get the procurement overview, which is the equivalent question for them.
-  Widget _homeScreen() {
-    if (_has(BuildWiseRoles.procurementDesk)) {
-      return ProcurementHomeScreen(siteScoped: false);
-    }
-    if (_has(BuildWiseRoles.approvers)) {
-      return const ApprovalsScreen();
-    }
-    return FieldWorkspaceScreen(role: _fieldRole);
-  }
+  /// The home tab. Every role lands on its own role dashboard
+  /// (`DashboardScreen`), which picks its metrics, quick actions and alerts from
+  /// the signed-in role — the Site Engineer's is material-request work, the
+  /// Procurement Officer's is RFQ and quotation work. `mobile_parity_test` pins
+  /// this: one dashboard, fetched once, showing that role's own cases.
+  Widget _homeScreen() => DashboardScreen(
+    roles: _roles,
+    service: _operationsService,
+    onNavigate: openRoute,
+  );
 
   /// Maps a web application route onto the mobile tab that carries the same
   /// work, so a deep link from the web app lands somewhere equivalent.
+  @override
   void openRoute(String route) {
     final label = switch (route) {
       '/material-requests' =>
-        _has({BuildWiseRoles.siteEngineer}) ? 'Requests' : 'Approvals',
+        _has(BuildWiseRoles.approvers) ? 'Approvals' : 'Requests',
       '/deliveries' => 'Deliveries',
       '/quality-inspections' => 'Inspections',
-      '/non-conformances' => 'Inspections',
+      '/non-conformances' => 'NCRs',
       '/admin' => 'Admin',
       '/rfqs' => 'RFQs',
       '/quotations' => 'Quotations',
-      '/suppliers' => 'RFQs',
-      '/purchase-orders' => 'Quotations',
-      '/procurement' => _has(BuildWiseRoles.procurementDesk) ? 'Home' : 'Status',
+      '/suppliers' => 'Suppliers',
+      '/purchase-orders' => 'Orders',
+      '/procurement' =>
+        _has(BuildWiseRoles.procurementDesk) ? 'Home' : 'Status',
       '/agent-workflows' => 'Agents',
       _ => 'Home',
     };
-    final index = _destinations.indexWhere((destination) => destination.label == label);
+    final index = _destinations.indexWhere(
+      (destination) => destination.label == label,
+    );
     if (index >= 0) setState(() => selectedIndex = index);
   }
 
@@ -502,39 +579,48 @@ class _MainAppShellState extends State<MainAppShell>
       }
       final destinations = _destinations;
       final safeIndex = selectedIndex.clamp(0, destinations.length - 1);
-      return Scaffold(
-        appBar: AppBar(
-          // All seven roles share this shell, so the signed-in role is shown up
-          // top. It explains at a glance why a given set of tabs is visible.
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('BuildWise'),
-              if (_sessionRoleLabel != null)
-                Text(
-                  _sessionRoleLabel!,
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-            ],
-          ),
-          actions: [
-            Badge(
-              isLabelVisible: _unreadNotifications > 0,
-              label: Text('$_unreadNotifications'),
-              child: IconButton(onPressed: _openNotifications, tooltip: 'Notifications', icon: const Icon(Icons.notifications_none)),
-            ),
-            IconButton(onPressed: _signOut, tooltip: 'Sign out', icon: const Icon(Icons.logout)),
-          ],
-        ),
-        body: IndexedStack(index: safeIndex, children: [for (final item in destinations) item.builder(context)]),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: safeIndex,
-          onDestinationSelected: (index) => setState(() => selectedIndex = index),
-          destinations: [
-            for (final item in destinations)
-              NavigationDestination(icon: Icon(item.icon), selectedIcon: Icon(item.selectedIcon), label: item.label),
-          ],
+      final menu = <String, String>{
+        'Home': 'Dashboard',
+        if (_has(BuildWiseRoles.approvers))
+          'Approvals': 'Material Requests'
+        else
+          'Requests': 'Material Requests',
+        if (_has({
+          BuildWiseRoles.procurementOfficer,
+          BuildWiseRoles.procurementManager,
+          BuildWiseRoles.administrator,
+        })) ...{
+          'Suppliers': 'Suppliers',
+          'Quotations': 'Quotations',
+          'RFQs': 'RFQs',
+        },
+        'Agents': 'Agent Workflows',
+        'Orders': 'Purchase Orders',
+        'Deliveries': 'Deliveries',
+        'Inspections': 'Quality Inspections',
+        'NCRs': 'Non-Conformance Reports',
+        if (_has(BuildWiseRoles.governance)) 'Admin': 'User Management',
+      };
+      final visible = menu.entries
+          .where((entry) => destinations.any((d) => d.label == entry.key))
+          .toList();
+      return ReactAppShell(
+        labels: visible.map((entry) => entry.value).toList(),
+        selectedLabel:
+            menu[destinations[safeIndex].label] ??
+            destinations[safeIndex].label,
+        onNavigate: (label) {
+          final entry = visible.firstWhere((entry) => entry.value == label);
+          openDestination(destinations.indexWhere((d) => d.label == entry.key));
+        },
+        displayName: _displayName,
+        role: _roles.isEmpty ? 'Team member' : _roles.first,
+        unreadNotifications: _unreadNotifications,
+        onNotifications: _openNotifications,
+        onSignOut: _signOut,
+        child: KeyedSubtree(
+          key: ValueKey(destinations[safeIndex].label),
+          child: destinations[safeIndex].builder(context),
         ),
       );
     },
@@ -542,10 +628,14 @@ class _MainAppShellState extends State<MainAppShell>
 }
 
 class _MobileDestination {
-  const _MobileDestination({required this.label, required this.icon, required this.selectedIcon, required this.builder});
+  const _MobileDestination({
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
+    required this.builder,
+  });
   final String label;
   final IconData icon;
   final IconData selectedIcon;
   final WidgetBuilder builder;
 }
-

@@ -150,6 +150,26 @@ public class RbacAuthorizationTests : IClassFixture<RbacApiFactory>
     }
 
     /// <summary>
+    /// Regression for the 403 the web sidebar exposed: Quality Inspections and
+    /// Non-Conformance Reports are listed for the Procurement Officer, so the
+    /// read endpoints must honour the QualityReaders policy for that role.
+    /// Writes remain forbidden for the officer (asserted by the
+    /// <c>ForbiddenEndpoints</c> matrix above: <c>POST /api/quality-inspections</c>).
+    /// </summary>
+    [Theory]
+    [InlineData("/api/quality-inspections")]
+    [InlineData("/api/quality-inspections/non-conformances")]
+    public async Task Procurement_officer_can_read_quality_records(string path)
+    {
+        using var client = _factory.CreateClientFor(Roles.ProcurementOfficer);
+
+        using var response = await client.GetAsync(path);
+
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    /// <summary>
     /// A supplier is an external stakeholder, not a BuildWise user. The former
     /// <c>/api/supplier-portal/*</c> surface no longer exists, so a token
     /// carrying the legacy <c>Supplier</c> role must reach nothing at all.

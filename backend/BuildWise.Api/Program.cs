@@ -133,7 +133,10 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(Policies.SiteOperationsOnly, policy =>
         policy.RequireRole(Roles.SiteEngineer, Roles.SiteOfficer));
 
-    options.AddPolicy(Policies.ProcurementStaffOnly, policy =>
+    options.AddPolicy(Policies.DeliveryReceiversOnly, policy =>
+            policy.RequireRole(Roles.SiteOfficer));
+
+        options.AddPolicy(Policies.ProcurementStaffOnly, policy =>
         policy.RequireRole(Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.Administrator));
 
     options.AddPolicy(Policies.SupplierAdministrationOnly, policy =>
@@ -154,9 +157,16 @@ builder.Services.AddAuthorization(options =>
             Roles.ProcurementOfficer, Roles.ProcurementManager, Roles.SiteManager,
             Roles.Administrator));
 
+    // Quality reads. The Procurement Officer is deliberately included: the web
+    // sidebar exposes Quality Inspections and Non-Conformance Reports to the
+    // whole procurement desk so an officer can track the quality outcome of the
+    // orders they raised. This policy only grants *read* access — completing an
+    // inspection stays behind QualityControlOnly and NCR transitions behind
+    // ProcurementDecisionOnly, so a reader can never act as a reviewer.
     options.AddPolicy(Policies.QualityReaders, policy =>
         policy.RequireRole(
             Roles.SiteEngineer, Roles.SiteOfficer,
+            Roles.ProcurementOfficer,
             Roles.ProcurementManager, Roles.SiteManager,
             Roles.QualityInspector, Roles.Administrator));
 

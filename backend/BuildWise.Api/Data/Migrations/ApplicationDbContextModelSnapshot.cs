@@ -595,8 +595,7 @@ namespace BuildWise.Api.Data.Migrations
 
                     b.Property<string>("FileUrl")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
+                        .HasColumnType("text");
 
                     b.Property<int>("InspectionId")
                         .HasColumnType("integer");

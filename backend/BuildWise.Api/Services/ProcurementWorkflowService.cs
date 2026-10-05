@@ -9,6 +9,14 @@ namespace BuildWise.Api.Services;
 
 public class ProcurementWorkflowService
 {
+    public async Task<ProcurementWorkflowDetailsDto?> GetLatestWorkflowForRequestAsync(int requestId)
+    {
+        var id = await _db.AgentWorkflows
+            .Where(w => w.MaterialRequestId == requestId && w.Steps.Any(s => s.AgentRole == "QuotationSupplierAnalysisAgent"))
+            .OrderByDescending(w => w.CreatedAt).ThenByDescending(w => w.Id)
+            .Select(w => (int?)w.Id).FirstOrDefaultAsync();
+        return id.HasValue ? await GetWorkflowDetailsAsync(id.Value) : null;
+    }
     /// <summary>agent_workflow_steps.agent_role for the tool-using analysis step (spec §6).</summary>
     private const string AnalysisAgentRole = "QuotationSupplierAnalysisAgent";
 

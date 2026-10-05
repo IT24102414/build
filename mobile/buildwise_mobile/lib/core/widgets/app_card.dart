@@ -6,13 +6,16 @@ class AppCard extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(16),
     this.onTap,
+    this.color,
   });
   final Widget child;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) => Card(
+    color: color,
     clipBehavior: Clip.antiAlias,
     child: InkWell(
       onTap: onTap,

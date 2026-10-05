@@ -70,7 +70,7 @@ const STAGES = [
     label: 'Deliveries',
     short: 'Delivery',
     to: '/deliveries',
-    groups: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.QualityInspector, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator],
+    groups: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ProcurementOfficer, ROLES.QualityInspector, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator],
     load: async () => (await qualityApi.listDeliveries()).length,
   },
   {
@@ -78,7 +78,7 @@ const STAGES = [
     label: 'Quality Inspections',
     short: 'Inspection',
     to: '/quality-inspections',
-    groups: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.QualityInspector, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator],
+    groups: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ProcurementOfficer, ROLES.QualityInspector, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator],
     load: async () => (await qualityApi.listInspections()).length,
   },
   {
@@ -86,7 +86,7 @@ const STAGES = [
     label: 'Non-Conformances',
     short: 'NCR',
     to: '/non-conformances',
-    groups: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.QualityInspector, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator],
+    groups: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ProcurementOfficer, ROLES.QualityInspector, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator],
     load: async () => (await qualityApi.listNonConformances()).length,
   },
   {
@@ -94,7 +94,7 @@ const STAGES = [
     label: 'Resolutions',
     short: 'Resolved',
     to: '/non-conformances',
-    groups: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.QualityInspector, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator],
+    groups: [ROLES.SiteEngineer, ROLES.SiteOfficer, ROLES.ProcurementOfficer, ROLES.QualityInspector, ROLES.ProcurementManager, ROLES.SiteManager, ROLES.Administrator],
     // Resolved + closed + accepted-exception = reports that reached an outcome.
     load: async () => {
       const ncrs = await qualityApi.listNonConformances()

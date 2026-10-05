@@ -1,4 +1,15 @@
-# Component 2 documentation index
+# Current documentation entry points
+
+- [Submission evidence and checklist](submission-readiness.md)
+- [Consolidated report draft](submission-report.md)
+- [Current root README](../README.md)
+- [React/Flutter parity review](mobile-web-parity-review.md)
+- [SMTP setup](email-setup.md)
+- [Current AI maintenance disclosure](reports/2026-10-05-codex-maintenance-log.md)
+
+The technical guides below include historical observations. Current status and counts are in the root README and submission checklist.
+
+# BuildWise documentation index
 
 Everything for **Component 2 — Supplier, Quotation & Procurement Management** (SE3090 group assignment).
 

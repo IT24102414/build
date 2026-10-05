@@ -13,7 +13,7 @@ export default function QuotationComparisonView({ comparison, onRunAnalysis, run
   return (
     <Card title="Quotation comparison" subtitle="One row per requested item, one column per supplier quotation.">
       <div className="actions" style={{ marginBottom: 'var(--space-4)' }}>
-        <Button onClick={onRunAnalysis} disabled={running}>{running ? 'Running AI analysis…' : 'Run AI Analysis'}</Button>
+        {onRunAnalysis && <Button onClick={onRunAnalysis} disabled={running}>{running ? 'Running AI analysis…' : 'Run AI Analysis'}</Button>}
       </div>
       <div className="table-wrap">
         <table className="data-table">

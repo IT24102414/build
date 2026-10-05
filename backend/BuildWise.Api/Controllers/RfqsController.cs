@@ -173,8 +173,8 @@ public class RfqsController : ControllerBase
             return Ok(new { message = $"RFQ notification email sent successfully to {dto.RecipientEmail}", emailSent = true });
         }
 
-        _logger.LogWarning("RFQ #{RfqId} email for {Recipient} was logged, not sent — SMTP is not configured.", rfq.Id, dto.RecipientEmail);
-        return Ok(new { message = $"RFQ #{rfq.Id} recorded, but the notification email was NOT sent (email service not configured on the server).", emailSent = false });
+        _logger.LogWarning("RFQ #{RfqId} email for {Recipient} was not sent. Check SMTP configuration and server logs.", rfq.Id, dto.RecipientEmail);
+        return Ok(new { message = $"RFQ #{rfq.Id} notification email was NOT sent. Check the server's SMTP configuration and email provider connection. You can retry sending the email.", emailSent = false });
     }
 
     [HttpPost("{id:int}/close")]

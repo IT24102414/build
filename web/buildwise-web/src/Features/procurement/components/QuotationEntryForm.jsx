@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Card, SelectInput, TextInput } from '../../../components/shared'
 import { procurementApi } from '../services/procurementApi'
+import { validateQuantity } from '../../../utils/sriLankaValidation'
 
 const todayStr = () => new Date().toISOString().slice(0, 10)
 const plusDays = (days) => {
@@ -74,6 +75,37 @@ export default function QuotationEntryForm({ requestDetail, onCreated }) {
   const updateLine = (itemId, field) => (event) => {
     setLines((prev) => ({ ...prev, [itemId]: { ...prev[itemId], [field]: event.target.value } }))
   }
+
+  /**
+   * Per-line numeric rules, shown under the field as the officer types:
+   *   quantity — a number greater than 0 (whole numbers for discrete units
+   *              such as bags/pieces, via the shared validateQuantity rule);
+   *   unit price — a number that is never negative.
+   * A line the officer has not started typing in is not an error: it is simply
+   * excluded from the quotation (same filter the submit handler applies).
+   */
+  const lineErrors = useMemo(() => {
+    const map = {}
+    for (const item of items) {
+      const line = lines[item.id] || {}
+      const rawQuantity = String(line.quantity ?? '').trim()
+      const rawUnitPrice = String(line.unitPrice ?? '').trim()
+      const errs = {}
+
+      if (rawQuantity !== '') {
+        const quantityCheck = validateQuantity(rawQuantity, item.unit)
+        if (!quantityCheck.isValid) errs.quantity = quantityCheck.error
+      }
+      if (rawUnitPrice !== '') {
+        const price = Number(rawUnitPrice)
+        if (Number.isNaN(price) || price < 0) {
+          errs.unitPrice = 'Unit price must be a number of 0 or more.'
+        }
+      }
+      if (Object.keys(errs).length > 0) map[item.id] = errs
+    }
+    return map
+  }, [items, lines])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -240,6 +272,7 @@ export default function QuotationEntryForm({ requestDetail, onCreated }) {
                 step="0.01"
                 value={lines[item.id]?.quantity || ''}
                 onChange={updateLine(item.id, 'quantity')}
+                error={lineErrors[item.id]?.quantity}
               />
               <TextInput
                 label="Unit price"
@@ -249,6 +282,7 @@ export default function QuotationEntryForm({ requestDetail, onCreated }) {
                 step="0.01"
                 value={lines[item.id]?.unitPrice || ''}
                 onChange={updateLine(item.id, 'unitPrice')}
+                error={lineErrors[item.id]?.unitPrice}
               />
               <div>
                 <span className="field__label">Line total</span>

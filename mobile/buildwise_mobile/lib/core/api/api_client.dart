@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -28,7 +29,9 @@ String defaultApiBaseUrl() {
     return '$scheme://$host:5078/api';
   }
   // Android emulator: 10.0.2.2 is the host machine's loopback.
-  return 'http://10.0.2.2:5078/api';
+  return defaultTargetPlatform == TargetPlatform.android
+      ? 'http://10.0.2.2:5078/api'
+      : 'http://localhost:5078/api';
 }
 
 /// Base URL for BuildWise.Api.
@@ -101,7 +104,11 @@ class ApiClient {
   }) async {
     final headers = await _authHeaders(json: true);
     return _client
-        .put(Uri.parse('$apiBaseUrl$path'), headers: headers, body: body == null ? null : jsonEncode(body))
+        .put(
+          Uri.parse('$apiBaseUrl$path'),
+          headers: headers,
+          body: body == null ? null : jsonEncode(body),
+        )
         .timeout(timeout ?? _defaultTimeout);
   }
 
@@ -113,6 +120,21 @@ class ApiClient {
     final headers = await _authHeaders(json: true);
     return _client
         .post(
+          Uri.parse('$apiBaseUrl$path'),
+          headers: headers,
+          body: body == null ? null : jsonEncode(body),
+        )
+        .timeout(timeout ?? _defaultTimeout);
+  }
+
+  Future<http.Response> patch(
+    String path, {
+    Map<String, dynamic>? body,
+    Duration? timeout,
+  }) async {
+    final headers = await _authHeaders(json: true);
+    return _client
+        .patch(
           Uri.parse('$apiBaseUrl$path'),
           headers: headers,
           body: body == null ? null : jsonEncode(body),

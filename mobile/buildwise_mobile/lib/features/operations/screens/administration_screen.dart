@@ -35,6 +35,31 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
   String _role = BuildWiseRoles.siteEngineer;
   bool _saving = false;
   String? _error;
+  String? _nameError, _emailError, _passwordError;
+
+  void _validateFields() {
+    _nameError = _name.text.trim().isEmpty ? 'Enter the full name.' : null;
+    _emailError =
+        RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(_email.text.trim())
+        ? null
+        : 'Enter a valid email, e.g. name@gmail.com.';
+    final password = _password.text;
+    _passwordError =
+        password.length >= 8 &&
+            RegExp(r'[a-zA-Z]').hasMatch(password) &&
+            RegExp(r'\d').hasMatch(password)
+        ? null
+        : 'Use at least 8 characters, including a letter and a number.';
+  }
+
+  void _fieldChanged(String _) {
+    setState(() {
+      _error = null;
+      if (_nameError != null || _emailError != null || _passwordError != null) {
+        _validateFields();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -46,17 +71,11 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
 
   Future<void> _save() async {
     final password = _password.text;
-    if (_name.text.trim().isEmpty ||
-        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(_email.text.trim())) {
-      setState(() => _error = 'Full name and a valid email are required.');
-      return;
-    }
-    if (password.length < 8 ||
-        !RegExp(r'[a-zA-Z]').hasMatch(password) ||
-        !RegExp(r'\d').hasMatch(password)) {
-      setState(
-        () => _error = 'Password must be at least 8 characters long and contain both a letter and a digit.',
-      );
+    setState(() {
+      _error = null;
+      _validateFields();
+    });
+    if (_nameError != null || _emailError != null || _passwordError != null) {
       return;
     }
     setState(() {
@@ -94,17 +113,31 @@ class _CreateUserSheetState extends State<_CreateUserSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Add user', style: Theme.of(context).textTheme.titleLarge),
-          AppTextField(label: 'Full name', controller: _name),
+          const SizedBox(height: 16),
+          AppTextField(
+            label: 'Full name',
+            controller: _name,
+            errorText: _nameError,
+            onChanged: _fieldChanged,
+          ),
+          const SizedBox(height: 16),
           AppTextField(
             label: 'Email',
             controller: _email,
             keyboardType: TextInputType.emailAddress,
+            hint: 'name@gmail.com',
+            errorText: _emailError,
+            onChanged: _fieldChanged,
           ),
+          const SizedBox(height: 16),
           AppTextField(
             label: 'Temporary password',
             controller: _password,
             obscureText: true,
+            errorText: _passwordError,
+            onChanged: _fieldChanged,
           ),
+          const SizedBox(height: 16),
           AppDropdown(
             label: 'Role',
             value: _role,

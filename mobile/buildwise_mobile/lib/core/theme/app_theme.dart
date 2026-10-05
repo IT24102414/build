@@ -19,7 +19,7 @@ abstract final class AppTheme {
     );
 
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(14),
       borderSide: const BorderSide(color: AppColors.border),
     );
 
@@ -30,10 +30,14 @@ abstract final class AppTheme {
       fontFamily: 'Plus Jakarta Sans',
       textTheme: const TextTheme(
         headlineSmall: TextStyle(
+          fontSize: 24,
+          letterSpacing: -.6,
           fontWeight: FontWeight.w700,
           color: AppColors.text,
         ),
         titleLarge: TextStyle(
+          fontSize: 20,
+          letterSpacing: -.4,
           fontWeight: FontWeight.w700,
           color: AppColors.text,
         ),
@@ -41,8 +45,8 @@ abstract final class AppTheme {
           fontWeight: FontWeight.w700,
           color: AppColors.text,
         ),
-        bodyLarge: TextStyle(color: AppColors.text),
-        bodyMedium: TextStyle(color: AppColors.text),
+        bodyLarge: TextStyle(color: AppColors.text, height: 1.5),
+        bodyMedium: TextStyle(color: AppColors.text, height: 1.45),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.background,
@@ -107,6 +111,9 @@ abstract final class AppTheme {
       dialogTheme: const DialogThemeData(
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(24)),
+        ),
       ),
       cardTheme: CardThemeData(
         color: Colors.white,
@@ -114,7 +121,7 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(17.6),
+          borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: AppColors.border),
         ),
       ),
@@ -124,7 +131,7 @@ abstract final class AppTheme {
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(14),
           ),
           textStyle: const TextStyle(
             fontFamily: 'Plus Jakarta Sans',
@@ -135,10 +142,10 @@ abstract final class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          side: const BorderSide(color: Color(0xFF98BBF6)),
+          side: const BorderSide(color: AppColors.border),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(14),
           ),
           textStyle: const TextStyle(
             fontFamily: 'Plus Jakarta Sans',
@@ -163,6 +170,22 @@ abstract final class AppTheme {
         errorBorder: border.copyWith(
           borderSide: const BorderSide(color: AppColors.danger),
         ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.surfaceMuted,
+        selectedColor: AppColors.primaryLight,
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        labelStyle: const TextStyle(
+          fontFamily: 'Plus Jakarta Sans',
+          color: AppColors.text,
+          fontWeight: FontWeight.w600,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: AppColors.textMuted,
+        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       ),
       dividerTheme: const DividerThemeData(
         color: AppColors.border,

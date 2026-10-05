@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// Responsive application chrome matching React's AppLayout breakpoints.
+/// Responsive application chrome with the shared workspace navigation.
 class ReactAppShell extends StatelessWidget {
   const ReactAppShell({
     super.key,
@@ -33,10 +33,10 @@ class ReactAppShell extends StatelessWidget {
               onPressed: () => onNavigate(label),
               style: TextButton.styleFrom(
                 foregroundColor: label == selectedLabel
-                    ? Colors.white
-                    : Colors.white70,
+                    ? AppColors.primary
+                    : AppColors.textMuted,
                 backgroundColor: label == selectedLabel
-                    ? Colors.white.withValues(alpha: .12)
+                    ? AppColors.primaryLight
                     : Colors.transparent,
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.symmetric(
@@ -44,7 +44,7 @@ class ReactAppShell extends StatelessWidget {
                   vertical: 10,
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 textStyle: const TextStyle(
                   fontSize: 14,
@@ -60,11 +60,8 @@ class ReactAppShell extends StatelessWidget {
       width: phone ? null : 268,
       padding: EdgeInsets.all(phone ? 12 : 16),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0D2137), AppColors.primaryDark, Color(0xFF081426)],
-        ),
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: phone
           ? SingleChildScrollView(
@@ -82,7 +79,7 @@ class ReactAppShell extends StatelessWidget {
                         height: 40,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE08A1E),
+                          color: AppColors.primary,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Text(
@@ -101,7 +98,7 @@ class ReactAppShell extends StatelessWidget {
                             Text(
                               'BuildWise',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: AppColors.text,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 18,
                               ),
@@ -109,7 +106,7 @@ class ReactAppShell extends StatelessWidget {
                             Text(
                               'Project operations',
                               style: TextStyle(
-                                color: Colors.white54,
+                                color: AppColors.textMuted,
                                 fontSize: 12,
                               ),
                             ),
@@ -124,7 +121,7 @@ class ReactAppShell extends StatelessWidget {
                   child: Text(
                     'WORKSPACE',
                     style: TextStyle(
-                      color: Colors.white38,
+                      color: AppColors.textMuted,
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
@@ -144,9 +141,9 @@ class ReactAppShell extends StatelessWidget {
         fixedSize: const Size(38, 38),
         minimumSize: const Size(38, 38),
         padding: const EdgeInsets.all(8),
-        foregroundColor: const Color(0xFF0043A4),
+        foregroundColor: AppColors.text,
         side: const BorderSide(color: AppColors.border),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       );
       final initials = displayName
           .split(' ')

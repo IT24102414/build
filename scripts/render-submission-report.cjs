@@ -34,6 +34,7 @@ function markdown(source) {
 (async () => {
   let source = fs.readFileSync(path.join(root, 'docs/submission-report.md'), 'utf8');
   source += '\n\n' + fs.readFileSync(path.join(root, 'docs/submission-completion-guide.md'), 'utf8');
+  source += '\n\n' + fs.readFileSync(path.join(root, 'docs/four-student-contribution-review.md'), 'utf8');
   const individualLogs = [
     ['Student 1: Peiris DPSS', 'IT24XXXXX-Peiris-ai-usage-log.md'],
     ['Student 2: Theebika', 'IT24102414-ai-usage-log.md'],
@@ -70,6 +71,18 @@ function markdown(source) {
       footerTemplate:'<div style="font:8px Arial;width:100%;text-align:center;color:#64748b"><span class="pageNumber"></span> / <span class="totalPages"></span></div>' });
   } finally { await browser.close(); }
   const report = await PDFDocument.load(bytes);
+  const infographicPath = path.join(root, 'docs/BuildWise_Architecture_Workflow_Colour.png');
+  if (fs.existsSync(infographicPath)) {
+    const infographic = await report.embedPng(fs.readFileSync(infographicPath));
+    const page = report.addPage([841.89, 595.28]);
+    const size = infographic.scaleToFit(805.89, 559.28);
+    page.drawImage(infographic, {
+      x: (841.89 - size.width) / 2,
+      y: (595.28 - size.height) / 2,
+      width: size.width,
+      height: size.height,
+    });
+  }
   for (const name of ['BuildWise_ERD.pdf', 'BuildWise_Scenario.pdf']) {
     const diagram = await PDFDocument.load(fs.readFileSync(path.join(root, 'docs', name)));
     for (const page of await report.copyPages(diagram, diagram.getPageIndices())) report.addPage(page);

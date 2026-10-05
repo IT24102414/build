@@ -1,0 +1,13 @@
+# BuildWise illustrated architecture and workflow
+
+Generated with the built-in image-generation tool on 5 October 2026 for the assignment report. This is an AI-generated illustration, not deployment evidence. Use source code and the editable Mermaid diagrams to verify architecture claims.
+
+Content correction prompt:
+
+Correct this infographic while preserving its professional colorful appearance. Required factual corrections: Optional AI Providers examples must read 'Gemini / Anthropic' only, removing OpenAI and Azure OpenAI. React client subtitle must read 'All authorized roles' and Flutter client subtitle 'All authorized roles • Camera evidence', because both apps support all seven roles. SMTP subtitle must read 'RFQ and account notifications'. Delivery Agent subtitle 'Analyze shortages and damage', not update status autonomously. Quality agent subtitle 'Assess inspection risk' because backend rules create NCR. Correct bottom workflow routing precisely: from step 8 Inspect + Evidence arrow must lead first into diamond 'Rejected quantity > 0?' (remove subtitle about failed inspection items). Diamond has exactly two outbound arrows: Yes -> Create NCR on left; No -> No NCR on right. Remove existing arrow directly from step8 to No NCR, and remove direct diamond to dashboard arrow. Each outcome then leads to Shared dashboards & audit. No NCR outcome subtitle 'Zero rejected quantity', avoid asserting inspection passed. Shared dashboards subtitle 'Shared persisted records, status and audit history' rather than real-time claim. Human approval controls purchase order creation; retain API Confirm Purchase Order step. Do not add any new technology, role restrictions or automatic agent writes. Keep text readable and complete.
+
+Final arrow correction prompt:
+
+Make ONLY these two arrow corrections to the lower workflow panel. Preserve all other content exactly. The purple arrow from the bottom of Step 8 currently points into the No NCR box, which is wrong: erase its arrowhead into No NCR and reroute it horizontally LEFT across the gap directly above both outcome boxes so its arrowhead enters the TOP vertex of the Rejected quantity > 0 diamond. Erase entirely the purple vertical arrow from the BOTTOM vertex of the diamond to Shared dashboards & audit. Diamond must have one incoming arrow at top and only two outgoing arrows, left Yes and right No. Create NCR and No NCR boxes retain their arrows down to dashboard. These corrections are essential. Nothing else changes.
+
+Selected image: BuildWise_Architecture_Workflow_Colour.png. Illustrative HTTPS labels describe the intended deployment boundary; local demonstration services use HTTP. This image does not certify public deployment.
